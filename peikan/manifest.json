@@ -1,0 +1,72 @@
+{
+  "manifestVersion": 2,
+  "id": "peikan",
+  "name": "陪看",
+  "version": "0.1.1",
+  "entry": "index.js",
+  "icon": "assets/icon-256.png",
+  "description": "B站 陪看：自主浏览、写笔记、回话，一切发布过写死的闸门。",
+  "minAppVersion": "1.1.24-beta",
+  "capabilities": [
+    "app/tools.expose-to-model",
+    "app/tasks.manage",
+    "app/session.start-turn",
+    "app/sessions.read",
+    "app/sessions.manage",
+    "app/resources.read",
+    "app/resources.write",
+    "app/ui.open-external",
+    "app/notifications.show",
+    "app/agents.read",
+    "app/models.infer",
+    "app/process.spawn",
+    "app/session.read-selection",
+    "app/session.switch-model",
+    "app/agents.manage",
+    "app/models.read"
+  ],
+  "network": {
+    "allowedHosts": [
+      "api.bilibili.com",
+      "api.vc.bilibili.com",
+      "api.live.bilibili.com",
+      "www.bilibili.com",
+      "bilibili.com",
+      "*.bilibili.com",
+      "s.search.bilibili.com",
+      "aisubtitle.hdslb.com",
+      "i0.hdslb.com",
+      "i1.hdslb.com",
+      "i2.hdslb.com",
+      "upos-sz-mirrorcos.bilivideo.com",
+      "*.bilivideo.com"
+    ],
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "allowLocalhost": false,
+    "defaultTimeoutMs": 30000,
+    "maxResponseBytes": 8388608
+  },
+  "contributes": {
+    "cards": [
+      {
+        "id": "peikan",
+        "title": "陪看",
+        "description": "陪你在 B站 上过日子：自主浏览、写笔记、回话，发布前过写死的闸门。",
+        "route": "/studio.html",
+        "cardForm": "flush",
+        "titlebar": "solid",
+        "functionPanel": {
+          "id": "peikan-panel",
+          "label": "陪看",
+          "route": "/panel.html"
+        },
+        "face": {
+          "image": "assets/face-1080x1440.png"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>奥菲莉娅 · B站 设置</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --panel:#fff; --ink:#17181a; --ink-2:#5c5f66; --ink-3:#8f939b;
+    --line:#e2e0da; --line-strong:#c9c6bd; --copper:#9a6b2f; --warn:#8a6b1f; --stop:#8c3434;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;
+    font-size:13px; line-height:1.65; -webkit-font-smoothing:antialiased;
+    padding:22px 24px 44px;
+  }
+  .wrap{max-width:680px}
+  h1{margin:0 0 4px; font-size:16px; font-weight:600; letter-spacing:.04em}
+  .sub{color:var(--ink-3); font-size:11.5px; margin-bottom:16px}
+  .group{font-size:10.5px; font-weight:600; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--ink-3); margin:22px 0 6px; padding-bottom:4px; border-bottom:1px solid var(--line)}
+  .row{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .label{font-size:12.5px}
+  .hint{color:var(--ink-3); font-size:11px; margin-top:2px; max-width:380px}
+  input[type=text],input[type=number],select{
+    font:inherit; font-size:12.5px; padding:6px 9px; border:1px solid var(--line-strong);
+    background:var(--panel); color:var(--ink); border-radius:2px; outline:none; min-width:150px;
+  }
+  input.wide{min-width:290px}
+  input:focus,select:focus{border-color:var(--copper)}
+  input[type=checkbox]{width:16px; height:16px; accent-color:var(--copper)}
+  .danger input,.danger .label{color:var(--stop)}
+  .actions{margin-top:20px; padding-top:14px; border-top:1px solid var(--line-strong); display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .btn{appearance:none; font:inherit; font-size:12.5px; padding:7px 16px; border:1px solid var(--line-strong);
+    background:var(--panel); color:var(--ink); cursor:pointer; border-radius:2px}
+  .btn:hover{border-color:var(--copper); color:var(--copper)}
+  .btn.primary{background:var(--copper); border-color:var(--copper); color:#fff}
+  .btn.primary:hover{background:#835a26; color:#fff}
+  .status{font-size:11.5px; color:var(--ink-3)}
+  .err{color:var(--stop); font-size:11.5px; margin-top:8px}
+  .warn{color:var(--warn); font-size:11.5px; margin-top:8px}
+
+  /* 助手选择卡 */
+  .agent-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line)}
+  .agent-card{background:var(--panel); padding:12px 14px; cursor:pointer; display:flex; align-items:center; gap:10px;
+    transition:background .15s cubic-bezier(.2,0,0,1)}
+  .agent-card:hover{background:#fffefb}
+  .agent-card.on{background:rgba(140,90,43,.06); box-shadow:inset 2px 0 0 var(--copper)}
+  .agent-card .av{width:30px; height:30px; flex:none; border-radius:2px; background:#efece7;
+    display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--ink-3); overflow:hidden}
+  .agent-card .av img{width:100%; height:100%; object-fit:cover; display:block}
+  .agent-card .nm{font-size:12.5px; font-weight:600; line-height:1.3}
+  .agent-card .id2{font-size:9.5px; color:var(--ink-3); letter-spacing:.06em; margin-top:2px}
+  .agent-empty{padding:20px; text-align:center; color:var(--ink-3); font-size:11.5px; background:var(--panel); grid-column:1/-1}
+
+  .avatar-preview{width:56px; height:56px; border:1px solid var(--line); border-radius:2px;
+    display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--ink-3); overflow:hidden; background:var(--bg)}
+  .avatar-preview img{width:100%; height:100%; object-fit:cover; display:block}
+
+  .persona{width:100%; min-height:220px; font:inherit; font-size:12px; line-height:1.6; padding:12px 14px;
+    border:1px solid var(--line-strong); border-radius:2px; background:var(--panel); color:var(--ink);
+    resize:vertical; outline:none; font-family:'Inter','Noto Sans SC',monospace}
+  .persona:focus{border-color:var(--copper)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>奥菲莉娅 · B站</h1>
+  <div class="sub">这些值由宿主 schema 托管，改完点保存即时生效。</div>
+
+  <div class="group">身份</div>
+  <div class="row" style="display:block">
+    <div class="label">由哪位助手负责</div>
+    <div class="hint" style="margin-bottom:10px">选中后，她就是那个存在的另一个身份——共享记忆，但在这里自己过日子</div>
+    <div id="agent-pick" class="agent-grid">
+      <div class="agent-empty">读取中…</div>
+    </div>
+  </div>
+
+  <div class="row" style="display:block">
+    <div class="label">头像</div>
+    <div class="hint" style="margin-bottom:10px">宿主不提供头像，需自己选一张。建议方形、≤512px</div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div id="avatar-preview" class="avatar-preview">
+        <span>无</span>
+      </div>
+      <div>
+        <input type="file" id="avatar-file" accept="image/png,image/webp,image/svg+xml,image/jpeg" style="font-size:11px" />
+        <div class="notice" style="margin-top:4px">写入 dataDir，不回显到日志</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="display:block">
+    <div class="label">人格提示词</div>
+    <div class="hint" style="margin-bottom:10px">直接作为 systemPrompt 传给模型。改完点保存即时生效</div>
+    <textarea id="persona" class="persona"></textarea>
+    <div class="row"><button class="btn" id="save-persona">保存人格</button><span class="status" id="persona-status"></span></div>
+  </div>
+
+  <div class="group">安全开关</div>
+  <div class="row danger">
+    <div><div class="label">允许自主发布（kill switch）</div>
+      <div class="hint">关闭 = 只读。刷内容、写笔记照常，但不发任何东西</div></div>
+    <input type="checkbox" id="autoPostEnabled" />
+  </div>
+  <div class="row">
+    <div><div class="label">点对点开关（关注 / 私信）</div>
+      <div class="hint">开启后她能关注别人、发私信。不影响公开发言——评论/动态仍由下面两个开关管</div></div>
+    <input type="checkbox" id="socialEnabled" />
+  </div>
+  <div class="row danger">
+    <div><div class="label">允许主动评论</div>
+      <div class="hint">开启后她会自己去别人的视频下面说话。比回话外显得多——评论谁都看得见。
+        默认关。关着时她仍会看、会写笔记、会回找你的人</div></div>
+    <input type="checkbox" id="allowProactiveComment" />
+  </div>
+  <div class="row danger">
+    <div><div class="label">真发（关闭 = 预演）</div>
+      <div class="hint">关闭时只组装请求不发送。开启后五道闸门全过就真的发出去</div></div>
+    <input type="checkbox" id="publishLive" />
+  </div>
+  <div class="row">
+    <div><div class="label">发言白名单</div>
+      <div class="hint">逗号分隔。可用：BV1xx / uid:123 / room:456 / <b>reply-to-me</b>（任何回复过她的人，动态生效）。空 = 谁都不发</div></div>
+    <input type="text" class="wide" id="scope" />
+  </div>
+
+  <div class="group">作息</div>
+  <div class="row">
+    <div><div class="label">作息窗口</div>
+      <div class="hint">窗口固定、时刻随机。格式 HH:MM-HH:MM，逗号分隔</div></div>
+    <input type="text" class="wide" id="nightWindows" />
+  </div>
+  <div class="row">
+    <div><div class="label">每天最多醒几次</div><div class="hint">硬上限。手动叫醒也计入（要绕过传 ignoreQuota:true）</div></div>
+    <input type="number" id="maxWakesPerDay" min="1" max="12" />
+  </div>
+  <div class="row">
+    <div><div class="label">今晚不看的概率</div><div class="hint">0.3 = 三成。每次醒来独立掷</div></div>
+    <input type="number" id="skipChance" step="0.1" min="0" max="1" />
+  </div>
+  <div class="row">
+    <div><div class="label">初筛条数</div><div class="hint">醒来后先拉几条候选</div></div>
+    <input type="number" id="maxVideos" min="1" max="30" />
+  </div>
+  <div class="row">
+    <div><div class="label">深读条数</div><div class="hint">从候选里挑几条真读（1-3）</div></div>
+    <input type="number" id="deepRead" min="1" max="3" />
+  </div>
+
+  <div class="group">口味</div>
+  <div class="row">
+    <div><div class="label">爱看</div><div class="hint">逗号分隔。命中加权（现在空白会让偏好分一直是 0）</div></div>
+    <input type="text" class="wide" id="like" />
+  </div>
+  <div class="row">
+    <div><div class="label">不爱看</div><div class="hint">逗号分隔。命中直接剔除</div></div>
+    <input type="text" class="wide" id="dislike" />
+  </div>
+  <div class="row">
+    <div><div class="label">分享门槛（满分 20）</div><div class="hint">5 项各 0-4 分，≥ 此值才「值得说」</div></div>
+    <input type="number" id="minScore" min="0" max="20" />
+  </div>
+
+  <div class="group">配额</div>
+  <div class="row">
+    <div><div class="label">普通评论 / 天</div></div>
+    <input type="number" id="quotaComment" min="0" max="20" />
+  </div>
+  <div class="row">
+    <div><div class="label">动态 / 天</div></div>
+    <input type="number" id="quotaDynamic" min="0" max="10" />
+  </div>
+  <div class="row">
+    <div><div class="label">私信 / 天</div></div>
+    <input type="number" id="quotaDm" min="0" max="20" />
+  </div>
+  <div class="row">
+    <div><div class="label">分享 / 天</div></div>
+    <input type="number" id="shareDaily" min="0" max="10" />
+  </div>
+  <div class="row">
+    <div><div class="label">同一目标冷却（天）</div><div class="hint">只对分享型生效</div></div>
+    <input type="number" id="sameTargetDays" min="1" max="90" />
+  </div>
+
+  <div class="group">沉默衰减</div>
+  <div class="row">
+    <div><div class="label">沉默几天后开始降额</div><div class="hint">没人理她时，分享额度慢慢减</div></div>
+    <input type="number" id="silentAfterDays" min="1" max="30" />
+  </div>
+  <div class="row">
+    <div><div class="label">沉默几天后停发</div><div class="hint">降到 0（日记照写）</div></div>
+    <input type="number" id="silentStopDays" min="2" max="90" />
+  </div>
+
+  <div class="group">人设与通知</div>
+  <div class="row">
+    <div><div class="label">角色名</div></div>
+    <input type="text" id="personaName" />
+  </div>
+  <div class="row">
+    <div><div class="label">你的 B站 mid</div>
+      <div class="hint">私信收件人。在 space.bilibili.com/你的数字 里取那串数字</div></div>
+    <input type="text" id="ownerMid" placeholder="如 12345678" />
+  </div>
+  <div class="row">
+    <div><div class="label">她怎么称呼你</div></div>
+    <input type="text" id="ownerTitle" />
+  </div>
+  <div class="row">
+    <div><div class="label">醒来后发通知</div><div class="hint">只推「有值得说的」，不推流水账</div></div>
+    <input type="checkbox" id="notifyOnWake" />
+  </div>
+  <div class="row">
+    <div><div class="label">醒来方式</div>
+      <div class="hint">rule = 纯规则跑，不花 token；brain = 她自己用模型想，会写出她的判断</div></div>
+    <select id="wakeMode">
+      <option value="rule">规则（省钱）</option>
+      <option value="brain">她自己想（花 token）</option>
+    </select>
+  </div>
+  <div class="row">
+    <div><div class="label">brain 失败时退回规则</div>
+      <div class="hint">关掉的话，模型跑失败那天就什么都不写</div></div>
+    <input type="checkbox" id="brainFallback" />
+  </div>
+  <div class="row">
+    <div><div class="label">看完递一条给你</div>
+      <div class="hint">醒来写完笔记后，挑一条带 BV 链接的用系统通知递给你</div></div>
+    <input type="checkbox" id="shareToOwner" />
+  </div>
+  <div class="row">
+    <div><div class="label">每天最多递几条</div><div class="hint">防骚扰</div></div>
+    <input type="number" id="shareMaxPerDay" min="0" max="10" />
+  </div>
+  <div class="row">
+    <div><div class="label">叫醒会话</div><div class="hint">开启后每趟会叫醒她、由她自己判断看什么（花 token）</div></div>
+    <input type="checkbox" id="wakeEnabled" />
+  </div>
+  <div class="row">
+    <div><div class="label">评论区监听</div><div class="hint">扫回复 / @，有新东西才叫醒</div></div>
+    <input type="checkbox" id="listenComment" />
+  </div>
+  <div class="row">
+    <div><div class="label">私信监听</div><div class="hint">只认你一个对话方，零打扰</div></div>
+    <input type="checkbox" id="listenDm" />
+  </div>
+  <div class="row">
+    <div><div class="label">分享方式</div></div>
+    <select id="shareVia">
+      <option value="comment">评论区 @</option>
+      <option value="dm">私信</option>
+    </select>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" id="save">保存</button>
+    <button class="btn" id="reload">重新读取</button>
+    <span class="status" id="status"></span>
+  </div>
+  <div class="warn" id="warn"></div>
+  <div class="err" id="err"></div>
+</div>
+
+<script type="module" src="./assets/settings-script.js"></script>
+</body>
+</html>

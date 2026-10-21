@@ -1,0 +1,39 @@
+# ── 不提交 ─────────────────────────────────────────────
+
+# 别人的仓库（只作参考，不是我的）
+ref-dsh-bili-whale/
+
+# 打包暂存
+_stage/
+
+# 依赖
+node_modules/
+*.tgz
+
+# 运行时数据（真机上的 dataDir 不在这里，但防手滑）
+data/
+app-data/
+*.jsonl
+
+# 凭据
+credentials.json
+secrets/
+*.pem
+*.key
+
+# 本机路径 / 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# 临时
+临时/
+*.tmp
+*.log
+_sync_report.txt
+
+# 调试截图（本地看界面用的，不进仓库）
+peikan/verify/ui-harness/shots/
+peikan/verify/out/

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>奥菲莉娅 · 面板</title>
+<style>
+/* 功能面板：窄栏（~200px），与主卡同一套色与排版语言
+   字阶 18/14/11/9 · 间距 4 基线 · Hana 暖白 + 暗铜 */
+
+:root{
+  --bg:#faf8f5;
+  --surface:#fffdf9;
+  --sunken:#f4f1ec;
+  --ink:#2b2724;
+  --ink-2:#5f574e;
+  --ink-3:#9a9186;
+  --line:#e8e4df;
+  --line-strong:#cfc8bd;
+  --copper:#8C5A2B;
+  --copper-wash:rgba(140,90,43,.06);
+  --ok:#5a9a6a;
+  --warn:#b8871f;
+  --err:#c44;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --fast:.14s;
+  --mid:.26s;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:'Inter','Noto Sans SC',-apple-system,system-ui,sans-serif;
+  font-size:12px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+
+.panel{display:flex; flex-direction:column; height:100%; overflow:hidden}
+
+/* ── 头部 ── */
+.ph{
+  padding:13px 14px 10px;
+  border-bottom:1px solid var(--line);
+  flex:none;
+}
+.ph h1{
+  margin:0; font-size:15px; font-weight:700;
+  letter-spacing:-.01em; line-height:1.2;
+}
+.ph .sub{
+  margin-top:4px;
+  font-size:10px; font-weight:600;
+  letter-spacing:.16em; text-transform:uppercase;
+  color:var(--copper); line-height:1.3;
+}
+.ph .live{
+  display:flex; align-items:center; gap:5px; margin-top:9px;
+  font-size:10px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--ink-3); line-height:1.3;
+}
+.ph .live i{
+  width:4px; height:4px; border-radius:50%; flex:none;
+  background:var(--ok);
+  box-shadow:0 0 0 0 rgba(90,154,106,.5);
+  animation:breathe 3s var(--ease) infinite;
+}
+.ph .live i.bad{background:var(--err); animation:none}
+@keyframes breathe{
+  0%,100%{box-shadow:0 0 0 0 rgba(90,154,106,.45)}
+  65%{box-shadow:0 0 0 4px rgba(90,154,106,0)}
+}
+
+/* ── 内容滚动 ── */
+.pb{flex:0 1 auto; overflow-y:auto; padding:0}
+.pb::-webkit-scrollbar{width:5px}
+.pb::-webkit-scrollbar-thumb{background:#ddd6cc; border-radius:3px}
+
+.grp{
+  padding:12px 14px 4px;
+  font-size:10.5px; font-weight:600;
+  letter-spacing:.18em; text-transform:uppercase;
+  color:var(--ink-3); line-height:1.3;
+}
+
+/* ── 关键数字（面板的主角）── */
+.kpi{
+  padding:4px 14px 9px;
+  display:flex; align-items:baseline; gap:7px;
+}
+.kpi .n{
+  font-size:17px; font-weight:700;
+  letter-spacing:-.03em; line-height:1;
+  font-variant-numeric:tabular-nums;
+  transition:color var(--fast) var(--ease);
+}
+.kpi .n.pass{color:var(--copper)}
+.kpi .l{
+  font-size:10.5px; font-weight:600;
+  letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-3); line-height:1.3; padding-bottom:1px;
+}
+
+/* ── 键值行 ── */
+.row{
+  display:flex; align-items:baseline; justify-content:space-between;
+  gap:10px; padding:5px 14px;
+  border-bottom:1px solid var(--line);
+  transition:background var(--fast) var(--ease);
+}
+.row:last-of-type{border-bottom:0}
+.row:hover{background:var(--copper-wash)}
+.row .k{
+  font-size:11.5px; color:var(--ink-2); line-height:1.45;
+}
+.row .v{
+  font-size:12.5px; font-weight:600;
+  font-variant-numeric:tabular-nums;
+  color:var(--ink); text-align:right; line-height:1.4;
+  transition:color var(--fast) var(--ease);
+}
+.row .v.muted{color:var(--ink-3); font-weight:500}
+.row .v.cu{color:var(--copper)}
+  /* 超过配额：标红 + 小三角，避免「5/3」被当成 bug */
+  .row .v.over{color:#8c3434; font-weight:600}
+  .row .v.over::after{content:"\25B2"; font-size:9px; margin-left:3px; vertical-align:super}
+
+/* ── 配额 2×2 紧凑格 ── */
+.qgrid{
+  display:grid; grid-template-columns:1fr 1fr; gap:1px;
+  background:var(--line); border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+}
+.qcell{background:var(--surface); padding:7px 10px 8px}
+.qcell .ql{font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--ink-3); line-height:1.3}
+.qcell .qv{font-size:13px; font-weight:700; font-variant-numeric:tabular-nums;
+  line-height:1.2; margin-top:1px}
+.qcell .qv small{font-size:10.5px; font-weight:600; color:var(--ink-2); margin-left:1px; opacity:.75}
+.qcell .tr{height:2px; background:#e8e4df; margin-top:5px; position:relative; overflow:hidden}
+.qcell .tr i{position:absolute; left:0; top:0; bottom:0; background:var(--copper);
+  transition:width .6s var(--ease)}
+
+/* ── 刚写下的（mini） ── */
+.mini{padding:0 14px}
+.mini .m{padding:8px 0; border-bottom:1px solid var(--line); display:flex; gap:8px; align-items:flex-start}
+.mini .m:last-child{border-bottom:0}
+.mini .ms{flex:none; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums;
+  color:var(--ink-3); min-width:15px; text-align:right; padding-top:1px}
+.mini .ms.pass{color:var(--copper)}
+.mini .mc{flex:1; min-width:0}
+.mini .mt{font-size:11.5px; line-height:1.5; color:var(--ink-2);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.mini .mm{font-size:10px; letter-spacing:.05em; color:var(--ink-3);
+  margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+/* ── 页脚 ── */
+.pf{
+  flex:none; margin-top:auto; padding:9px 14px 10px;
+  border-top:1px solid var(--line);
+  display:flex; justify-content:space-between; align-items:baseline;
+  font-size:10px; font-weight:600;
+  letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-3);
+}
+
+/* ── 状态提示 ── */
+.hint{
+  margin:12px 16px; padding:12px 10px;
+  border:1px dashed var(--line);
+  text-align:center; color:var(--ink-3);
+  font-size:11px; line-height:1.6;
+}
+
+/* ── 按钮 ── */
+.pbtn{
+  flex:none;
+  display:block; width:calc(100% - 28px); margin:12px 14px 8px;
+  appearance:none; font:inherit; font-size:11px;
+  letter-spacing:.12em; text-transform:uppercase;
+  padding:8px 0; border:1px solid var(--line-strong);
+  background:var(--surface); color:var(--ink-2);
+  cursor:pointer; border-radius:2px;
+  transition:all var(--fast) var(--ease);
+}
+.pbtn:hover{border-color:var(--copper); color:var(--copper); background:var(--copper-wash)}
+.pbtn:active{transform:scale(.98)}
+</style>
+</head>
+<body>
+<div class="panel">
+
+  <div class="ph">
+    <h1>奥菲莉娅</h1>
+    <div class="sub">The Unseen</div>
+    <div class="live"><i id="dot"></i><span id="live-text">读取中</span></div>
+  </div>
+
+  <div class="pb">
+
+    <div class="grp">今日</div>
+    <div class="kpi">
+      <span class="n" id="k-notes">0</span>
+      <span class="l">条笔记</span>
+    </div>
+
+    <div class="row"><span class="k">值得说</span><span class="v cu" id="v-pass">0</span></div>
+    <div class="row"><span class="k">醒过</span><span class="v" id="v-wake">0 / 3</span></div>
+    <div class="row"><span class="k">下一趟</span><span class="v" id="v-next">—</span></div>
+    <div class="row"><span class="k">待拍板</span><span class="v" id="v-review">0</span></div>
+
+    <div class="grp">余量</div>
+    <div class="qgrid" id="quota">
+      <div class="qcell"><div class="ql">评论</div><div class="qv">—<small>/—</small></div><div class="tr"><i></i></div></div>
+      <div class="qcell"><div class="ql">动态</div><div class="qv">—<small>/—</small></div><div class="tr"><i></i></div></div>
+      <div class="qcell"><div class="ql">私信</div><div class="qv">—<small>/—</small></div><div class="tr"><i></i></div></div>
+      <div class="qcell"><div class="ql">分享</div><div class="qv">—<small>/—</small></div><div class="tr"><i></i></div></div>
+    </div>
+
+    <div class="grp">刚写下的</div>
+    <div class="mini" id="recent"></div>
+
+    <div class="grp">开关</div>
+    <div class="row"><span class="k">自主发布</span><span class="v muted" id="v-post">—</span></div>
+    <div class="row"><span class="k">真发</span><span class="v muted" id="v-live">—</span></div>
+
+  </div>
+
+  <button class="pbtn" id="refresh">刷新</button>
+
+  <div class="pf">
+    <span>Unseen</span>
+    <span id="pf-ver">P7</span>
+  </div>
+
+</div>
+
+<script type="module" src="./assets/panel-script.js"></script>
+</body>
+</html>

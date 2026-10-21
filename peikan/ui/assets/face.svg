@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 720" width="540" height="720">
+  <rect width="540" height="720" fill="#F2EAD9"/>
+
+  <!-- 天线：两根粗圆头线 -->
+  <path d="M232 104 L194 52" stroke="#8C5A2B" stroke-width="19" stroke-linecap="round"/>
+  <path d="M308 104 L346 52" stroke="#8C5A2B" stroke-width="19" stroke-linecap="round"/>
+
+  <!-- 机身 -->
+  <rect x="70" y="108" width="400" height="276" rx="36" fill="#8C5A2B"/>
+
+  <!-- 屏幕 -->
+  <rect x="100" y="138" width="340" height="216" rx="17" fill="#F2EAD9"/>
+
+  <!-- 屏幕里：一大一小并肩坐在同一条线上 -->
+  <circle cx="212" cy="240" r="53" fill="#2B241E"/>
+  <circle cx="316" cy="266" r="34" fill="#8C5A2B"/>
+  <rect x="146" y="296" width="248" height="10" rx="5" fill="#2B241E" opacity="0.22"/>
+
+  <!-- 标题：2 字 · 字号 165 · 字距 20 → 350 = 65%（对照「邮件」的比例） -->
+  <text x="270" y="576" text-anchor="middle" font-family="'Source Han Serif SC','STZhongsong','SimSun',serif"
+        font-size="165" letter-spacing="20" fill="#2B241E"
+        stroke="#2B241E" stroke-width="6" paint-order="stroke">陪看</text>
+
+  <!-- 标题下细色条：家族里音频播放/图库有这个做法 -->
+  <rect x="196" y="612" width="148" height="9" rx="4.5" fill="#8C5A2B"/>
+</svg>

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>奥菲莉娅 · B站</title>
+<link rel="stylesheet" href="./assets/studio.css?v=20261020u" />
+</head>
+<body>
+
+<div class="shell">
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-inner">
+        <h2 id="page-title">笔记本</h2>
+        <span class="sub" id="page-sub">Observation notes</span>
+        <span class="sp"></span>
+        <span class="pill"><i></i><span id="mode-text">只读</span></span>
+        <button class="btn-icon" id="open-settings" title="设置">⚙</button>
+        <button class="btn-icon" id="refresh" title="刷新">↻</button>
+      </div>
+    </div>
+
+    <div class="tabs"><div class="tabs-inner" id="nav">
+      <a data-tab="notes" class="on">笔记本</a>
+      <a data-tab="rhythm">作息</a>
+      <a data-tab="inbox">互动</a>
+      <a data-tab="learned">学到</a>
+      <a data-tab="drafts">草稿箱</a>
+      <a data-tab="review">待拍板</a>
+      <a data-tab="diary">日记</a>
+      <a data-tab="ledger">账本</a>
+      <a data-tab="setup">接入</a>
+      <a data-tab="settings">设置</a>
+    </div></div>
+
+    <div class="body" id="body">
+
+      <!-- ── 笔记本 ── -->
+      <section class="panel" data-panel="notes" data-active="true">
+        <div class="hero">
+          <div class="lead">
+            <span class="n" id="hero-notes">0</span>
+            <span class="l">条笔记</span>
+          </div>
+          <div class="aside">
+            <div class="s"><span class="n" id="hero-pass">0</span><span class="l">值得说</span></div>
+            <div class="s"><span class="n" id="hero-wake">0<em>/3</em></span><span class="l">今日醒</span></div>
+            <div class="s"><span class="n" id="hero-say">0<em>/2</em></span><span class="l">今日说</span></div>
+          </div>
+        </div>
+
+        <!-- 新手引导：首次打开时说明这一页是什么，可永久关掉 -->
+        <div class="onboard" id="onboarding" hidden>
+          <div class="ob-h">
+            <b>这是她在 B站 上过的日子</b>
+            <button class="ob-x" id="ob-close" title="以后不再显示">×</button>
+          </div>
+          <p class="ob-p">
+            她会自己按作息醒来、看几条视频、写下判断。上面的数字是今天的状态：
+            <b>条笔记</b>是她写的观察，<b>值得说</b>是打分过线的，
+            <b>今日醒</b>是醒来次数，<b>今日说</b>是她今天对外说了几句话。
+          </p>
+          <p class="ob-p">
+            右边每一条都是她的一句话标题 + 完整判断。想让她开始动，
+            去「设置」把「允许自主发布」打开，或者在「接入」里配好登录态。
+          </p>
+          <div class="ob-steps">
+            <span><i>1</i> 接入：填 cookie</span>
+            <span><i>2</i> 设置：开自主发布</span>
+            <span><i>3</i> 等她醒，或手动叫一次</span>
+          </div>
+        </div>
+
+        <div class="sec">刚写下的</div>
+        <ul class="list" id="notes-list"></ul>
+        <div class="empty" id="notes-empty" hidden>笔记本是空的</div>
+      </section>
+
+      <!-- ── 作息 ── -->
+      <section class="panel" data-panel="rhythm">
+        <div class="hero">
+          <div class="lead">
+            <span class="n" id="r-wakes">0</span>
+            <span class="l">今日已醒</span>
+          </div>
+          <div class="aside">
+            <div class="s"><span class="n" id="r-next">—</span><span class="l">下一趟</span></div>
+            <div class="s"><span class="n" id="r-skip">—</span><span class="l">跳过概率</span></div>
+            <div class="s"><span class="n" id="r-wins">—</span><span class="l">窗口数</span></div>
+          </div>
+        </div>
+
+        <div class="sec">窗口</div>
+        <ul class="list" id="rhythm-windows"></ul>
+
+        <div class="sec">最近几趟</div>
+        <div class="tl" id="rhythm-tl"></div>
+      </section>
+
+      <!-- ── 互动 ── -->
+      <section class="panel" data-panel="inbox">
+        <div class="sec">谁找过她</div>
+        <div class="bar">
+          <select id="digest-hours">
+            <option value="6">近 6 小时</option>
+            <option value="24" selected>近 24 小时</option>
+            <option value="72">近 3 天</option>
+          </select>
+          <span class="grow"></span>
+          <span class="sstatus" id="digest-status"></span>
+          <button class="btn" id="digest-run">拉一眼</button>
+        </div>
+        <ul class="tight" id="digest-list"></ul>
+        <div class="void" id="digest-empty" hidden><b>没有人找她</b>这段时间收件箱是空的。</div>
+
+        <div class="sec">白名单 · 谁能收到她的话</div>
+        <div class="sh" style="margin-bottom:12px">能回话的范围。除了这里的人和找过她的人，她谁都碰不到。</div>
+        <div class="scope-list" id="allow-list"></div>
+        <div class="bar" style="margin-top:14px">
+          <span class="grow"></span>
+          <span class="sstatus" id="allow-status"></span>
+          <button class="btn" id="allow-forget" title="清空「谁找过她」的记录">清空动态名单</button>
+        </div>
+      </section>
+
+      <!-- ── 学到 ── -->
+      <section class="panel" data-panel="learned">
+        <div class="sec">她的口味</div>
+        <div class="sh" style="margin-bottom:12px">你的口味 ×0.7 + 她的 ×0.3。只有一方有数据时，那一方独占。</div>
+        <div class="stat-row" id="taste-kv"></div>
+        <ul class="taste-list" id="taste-list"></ul>
+        <div class="void" id="taste-empty" hidden><b>还没学到什么</b>她还没开始记口味。</div>
+
+        <div class="sec">她看过什么<span class="n" id="watch-note"></span></div>
+        <div class="stat-row" id="watch-kv"></div>
+        <div class="up-grid" id="up-list"></div>
+
+        <div class="sec">沉默衰减</div>
+        <div class="stat-row" id="silence-kv"></div>
+
+        <div class="sec">她赞过的</div>
+        <ul class="tight" id="likes-list"></ul>
+        <div class="void" id="likes-empty" hidden><b>还没点过赞</b></div>
+      </section>
+
+      <!-- ── 草稿箱 ── -->
+      <section class="panel" data-panel="drafts">
+        <div class="sec">草稿</div>
+        <ul class="list" id="drafts-list"></ul>
+        <div class="empty" id="drafts-empty" hidden>草稿箱是空的</div>
+      </section>
+
+      <!-- ── 待拍板 ── -->
+      <section class="panel" data-panel="review">
+        <div class="sec">待拍板</div>
+        <ul class="list" id="review-list"></ul>
+        <div class="empty" id="review-empty" hidden>没有待拍板的</div>
+      </section>
+
+      <!-- ── 日记 ── -->
+      <section class="panel" data-panel="diary">
+        <div class="seg" id="diary-switch">
+          <button data-which="private" class="on">她自己的</button>
+          <button data-which="executive">给你的</button>
+        </div>
+        <div class="sec" id="diary-head">不加滤镜的那本</div>
+        <ul class="list" id="diary-list"></ul>
+        <div class="empty" id="diary-empty" hidden>这本还没写</div>
+      </section>
+
+      <!-- ── 账本 ── -->
+      <section class="panel" data-panel="ledger">
+        <div class="sec">今日配额</div>
+        <div class="grid4" id="quota-grid"></div>
+
+        <div class="sec">她发出去的东西</div>
+        <div class="sh" style="margin-bottom:8px">只能删审计里记过「她发的」，删不了别人的。</div>
+        <ul class="tight" id="sent-list"></ul>
+        <div class="empty" id="sent-empty" hidden>还没公开发过什么</div>
+
+        <div class="sec">审计流</div>
+        <ul class="list" id="audit-list"></ul>
+        <div class="empty" id="audit-empty" hidden>还没有发布决策</div>
+      </section>
+
+      <!-- ── 接入 ── -->
+      <section class="panel" data-panel="setup">
+        <div class="sec">登录态</div>
+        <div class="field"><div><div class="fl">凭据</div><div class="fh">写入后永不回显</div></div><span class="fv" id="cred-state">—</span></div>
+        <div class="field"><div class="fl">SESSDATA</div><input type="password" id="ck-sessdata" placeholder="SESSDATA" autocomplete="off" /></div>
+        <div class="field"><div class="fl">bili_jct</div><input type="password" id="ck-jct" placeholder="bili_jct" autocomplete="off" /></div>
+        <div class="field"><div><div class="fl">buvid3</div><div class="fh">可空</div></div><input type="password" id="ck-buvid3" placeholder="buvid3" autocomplete="off" /></div>
+        <div class="row"><button class="btn primary" id="save-cred">写入凭据</button><span class="err" id="cred-err"></span></div>
+        <div class="notice">从浏览器 F12 → Application → Cookies 复制。SESSDATA 是 HttpOnly，脚本读不到。</div>
+
+        <div class="sec">当前配置</div>
+        <div class="field"><div class="fl">角色名</div><span class="fv" id="cfg-persona">—</span></div>
+        <div class="field"><div class="fl">称呼你</div><span class="fv" id="cfg-owner">—</span></div>
+        <div class="field"><div class="fl">分享方式</div><span class="fv" id="cfg-via">—</span></div>
+        <div class="field"><div class="fl">分享门槛</div><span class="fv" id="cfg-min">—</span></div>
+        <div class="field"><div class="fl">白名单</div><span class="fv" id="cfg-scope">—</span></div>
+        <div class="notice">助手、人格、头像、配额在「设置」页</div>
+      </section>
+      <!-- ── 设置（P17：App 内，弹不出浏览器）── -->
+      <section class="panel" data-panel="settings">
+        <!-- 身份：选助手 / 头像 / 人格（搬设置时漏掉的一块） -->
+        <div id="set-identity"></div>
+
+        <div id="settings-host"><div class="empty">读取中…</div></div>
+      </section>
+
+
+      <div class="foot">
+        <span>Unseen · Studio</span>
+        <span>P7 · v0.1.0</span>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+window.addEventListener('error', function (e) {
+  // 图片/资源 404 也会走到这里（Event 而非 ErrorEvent）。
+  // 那不该把整个界面标成「出错」——封面本来就是可能没有的。
+  if (!(e instanceof ErrorEvent)) return;
+  try { console.error('[studio] error:', e.message, e.filename, e.lineno); } catch (x) {}
+  var el = document.getElementById('page-sub');
+  if (el) el.textContent = 'JS 出错，详见控制台';
+}, true);
+window.addEventListener('unhandledrejection', function (e) {
+  try { console.error('[studio] rejection:', e.reason); } catch (x) {}
+  var el = document.getElementById('page-sub');
+  if (el) el.textContent = 'JS 出错，详见控制台';
+});
+</script>
+<script type="module" src="./assets/studio-script.js?v=20261020u"></script>
+</body>
+</html>
