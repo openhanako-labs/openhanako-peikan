@@ -52,8 +52,8 @@
 4. 先去「笔记本」页手动叫醒一次，确认她能看东西
 
 ```bash
-# 检查环境（不含 B站 凭据）
-node scripts/check-env.mjs
+# 检查模块能不能加载（不需要 B站 凭据）
+node peikan/verify/load-check.mjs
 ```
 
 ---
@@ -131,6 +131,7 @@ node scripts/check-env.mjs
 peikan/
   index.js             入口（注册路由 / 工具 / 任务）
   manifest.json        App 声明
+  sdk/                 宿主 SDK（index.js 依赖）
   lib/                 37 个模块
     auth.js            登录态 + WBI 签名
     client.js          B站 接口
@@ -144,9 +145,11 @@ peikan/
     taste.js           口味学习
     diary / note / store ...
   ui/                  三个界面（主界面 / 侧栏面板 / 设置）
-  verify/              523 项测试
+  verify/              35 个测试文件
   DECISIONS.md         为什么这么做
   playbooks/           故障卡
+LICENSE                AGPL-3.0（含上游 MIT 声明）
+NOTICE.md              派生清单与第三方许可
 ```
 
 ---
@@ -160,7 +163,7 @@ node verify/risk-check.mjs      # 风控熔断
 node verify/ui-coverage-check.mjs  # 每个能力都有界面入口
 ```
 
-**523 项，0 失败。**
+**578 项，0 失败。**
 
 几个测试专门防「同一行为多个出口，只改了一个」这个坑：
 
@@ -187,7 +190,25 @@ schedule-dedup-check  排程不重复
 
 ## 许可
 
-MIT
+**AGPL-3.0**（与 OpenHanako 组织惯例一致）。
+
+本项目部分实现派生自 [dsh-bili-whale](https://github.com/ALTERSSSS/dsh-bili-whale)
+（MIT，Copyright © 2026 ALTERSSSS）。
+
+MIT 允许再授权为更严格的协议，条件是在所有副本中保留原始版权声明——
+**完整许可声明与派生清单见 [NOTICE.md](NOTICE.md)**。
+
+---
+
+## 参考
+
+设计上的几个关键判断来自别的项目，不是我自己想出来的：
+
+| 来源 | 取用了什么 |
+|---|---|
+| [dsh-bili-whale](https://github.com/ALTERSSSS/dsh-bili-whale) | 收件箱拉取与楼层回读的实现；风控码表（12015/412/-352）；同视频 7 天、同一人 30 天两个硬限制；廉价轮询的思路 |
+
+**具体的派生文件与关系见 [NOTICE.md](NOTICE.md)。**
 
 ---
 
