@@ -33,12 +33,15 @@ function writeJson(p, v) {
  *
  * 旧数据只有 summary，所以读到缺 title 时由调用方回退（不强行改写历史）。
  */
+export /** 笔记软护栏上限：超过后裁剪最旧，保持 index.json 有界 */
+const MAX_NOTES = 2000;
+
 export function addNote(dataDir, {
   source = "", kind = "", title = "", summary = "", marks = [],
   cover = "", duration = 0, pubdate = 0, up = "", bvid = "", pic = "",
 } = {}) {
   const p = path.join(dir(dataDir, "notes"), "index.json");
-  const list = readJson(p, []);
+  let list = readJson(p, []);
 
   // 统一从 source 里抽 BV —— 规则路径写的 source 是 "BV:BVxxx"，
   // 之前只在 bili_note 工具里补，而规则路径直接调本函数，绕过了补全。
@@ -64,7 +67,8 @@ export function addNote(dataDir, {
   }
 
   const item = {
-    id: `n_${Date.now()}`,
+    // 2026-10-22：同毫秒写两条会撞 id（Date.now() 分辨率不够）。加随机后缀。
+    id: `n_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     at: new Date().toISOString(),
     source, kind,
     title: String(title || "").trim(),
@@ -88,6 +92,8 @@ export function addNote(dataDir, {
     bvid: bv,
   };
   list.push(item);
+  // 2026-10-22（P2-3）：超过软护栏就裁剪最旧，索引保持有界。
+  if (list.length > MAX_NOTES) list = list.slice(-MAX_NOTES);
   writeJson(p, list);
   return item;
 }

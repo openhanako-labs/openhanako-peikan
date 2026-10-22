@@ -279,9 +279,11 @@ export function budgetFor(modelInfo, want) {
   // 新策略：拿模型自己的 maxTokens 能力当上限，但不抢到底：
   //   · 有 contextWindow/maxTokens 信息 → 取 min(模型上限, 16000)，至少 8000
   //   · 没信息 → 保守给 8000
+  // 2026-10-22（P2-1）：硬顶提到 32000，给推理模型加倍重试留空间。
+  const BUDGET_HARD = 32000;
   const modelCap = Number(modelInfo?.maxTokens) || 0;
   const base = 8000;
-  const ceiling = modelCap > 0 ? Math.min(modelCap, 16000) : 16000;
+  const ceiling = modelCap > 0 ? Math.min(modelCap, BUDGET_HARD) : BUDGET_HARD;
   return Math.max(n, Math.min(ceiling, base));
 }
 
@@ -372,7 +374,7 @@ export async function ask(sdk, dataDir, { prompt, systemPrompt, maxTokens = 800,
  *   systemPrompt  覆盖默认人格
  *   maxRounds     工具循环上限
  */
-export async function think(sdk, dataDir, { prompt, tools = [], runTool, systemPrompt, maxRounds = MAX_TOOL_ROUNDS, maxTokens = 1200, temperature = 0.7 } = {}) {
+export async function think(sdk, dataDir, { prompt, tools = [], runTool, systemPrompt, maxRounds = MAX_TOOL_ROUNDS, maxTokens = 1200, temperature = 0.7, log } = {}) {
   const stream = sdk?.models?.stream;
   if (typeof stream !== "function") return { ok: false, error: "宿主未提供 models.stream" };
   if (typeof runTool !== "function") return { ok: false, error: "缺 runTool" };
@@ -385,7 +387,9 @@ export async function think(sdk, dataDir, { prompt, tools = [], runTool, systemP
 
   // 推理模型要给足预算（实测：200 token 全被 reasoning 吃掉，正文为空）
   const info = await modelInfoOf(sdk, m.provider, m.model);
-  const realMax = budgetFor(info, maxTokens);
+  // 2026-10-22（P2-1）：let 以便推理吃空预算时翻倍重试；retriedOnce 限制只重试一次。
+  let realMax = budgetFor(info, maxTokens);
+  let retriedOnce = false;
   const trace = [];
 
   for (let round = 0; round < maxRounds; round += 1) {
@@ -433,6 +437,14 @@ export async function think(sdk, dataDir, { prompt, tools = [], runTool, systemP
     // 实测 2026-10-20：group/auto-hy3 在 200 token 时 reasoning=200 output=200，
     // text 为空、toolCalls 为空 —— 表现就是「跑了但什么都没干」。
     if (!r.text && !r.toolCalls.length && r.reasoning) {
+      // 2026-10-22（P2-1）：推理吃空预算时，若 budget 未达硬顶且未重试过，
+      //   翻倍重试一次（同一 round 重新请求），给推理模型「多思考出正文」的机会。
+      if (!retriedOnce && realMax < 32000) {
+        retriedOnce = true;
+        realMax = Math.min(realMax * 2, 32000);
+        try { log?.warn?.(`[brain] 推理吃空预算（reasoning ${String(r.reasoning).length} 字），翻倍到 ${realMax} 重试`); } catch { /* 忽略 */ }
+        continue;
+      }
       return {
         ok: false,
         error: `推理吃空了预算（reasoning ${String(r.reasoning).length} 字，正文 0；maxTokens=${realMax}）。这个模型是推理型，需要更大预算。`,

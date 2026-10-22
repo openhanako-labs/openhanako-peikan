@@ -130,11 +130,20 @@ export async function shareNote(sdk, dataDir, note, opts = {}) {
   // 从来不记 quota。两个系统各记各的，界面看到的数和实际推送量对不上。
   // 现在：quota 是唯一真相，shareMaxPerDay 仅作兼容回退。
   let cap = maxPerDay;
-  // 上限优先级：显式 opts.maxPerDay > 配置 quota.shareDaily > 默认 10
+  // 上限优先级：opts.maxPerDay > cfg.quota.shareDaily > cfg 顶层 shareDaily > DEFAULTS
+  //
+  // 2026-10-22 修复（真跑验证暴露）：之前只读 cfg.quota.shareDaily，
+  // 若调用链里 cfg.quota 缺失，`{...quota.DEFAULTS, ...cfg.quota}` 只剩 DEFAULTS 的 3，
+  // 静默把分享上限变成 3，而配置实际是 5（日志「今日已推3（上限3）」）。
+  // 现在 cfg.quota 缺失时回退读 cfg 顶层 shareDaily；仍缺才用 DEFAULTS。
   if (opts.maxPerDay === undefined || opts.maxPerDay === null) {
-    const caps = { ...quota.DEFAULTS, ...((opts.cfg || {}).quota || {}) };
-    const qcap = Number(caps.shareDaily);
-    if (Number.isFinite(qcap) && qcap > 0) cap = qcap;
+    const cfg0 = (opts.cfg || {});
+    const qFromQuota = Number((cfg0.quota || {}).shareDaily);
+    const qFromTop = Number(cfg0.shareDaily);
+    const q = (Number.isFinite(qFromQuota) && qFromQuota > 0) ? qFromQuota
+      : (Number.isFinite(qFromTop) && qFromTop > 0) ? qFromTop
+      : quota.DEFAULTS.shareDaily;
+    if (Number.isFinite(q) && q > 0) cap = q;
   }
 
   if (Number(st.count || 0) >= cap) {

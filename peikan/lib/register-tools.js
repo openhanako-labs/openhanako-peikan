@@ -860,7 +860,6 @@ export async function registerTools(ctx, log) {
         dislike: cfg.dislike,
         minScore: cfg.minScore,
         shareToOwner: cfg.shareToOwner,
-        shareMaxPerDay: cfg.shareMaxPerDay,
         ownerMid: cfg.ownerMid,   // 没这个就不知道私信发给谁
       };
 
@@ -956,7 +955,9 @@ export async function registerTools(ctx, log) {
       const a = pick(payload);
       const cfg = await readConfig(ctx);
       const notes = store.listNotes(dataDir, 20).reverse();
-      const maxPerDay = Number(a.maxPerDay) > 0 ? Number(a.maxPerDay) : (Number(cfg.shareMaxPerDay) || 10);
+      // 2026-10-22：不传 maxPerDay 时交给 quota 决定上限（唯一真相），
+      // 不再从 shareMaxPerDay 取默认——那条路已废弃。
+      const maxPerDay = Number(a.maxPerDay) > 0 ? Number(a.maxPerDay) : undefined;
       // 收件人必须从配置里取 —— 之前没传 toMid，私信永远失败，
       // 结果每次都退回系统通知（明明互关了却发不出去）。
       const toMid = String(cfg.ownerMid || "");

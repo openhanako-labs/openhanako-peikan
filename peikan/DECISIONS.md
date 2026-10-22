@@ -3,6 +3,111 @@
 > 记录「为什么这么做」，不是「做了什么」。代码能说明 what，只有这里能说明 why。
 > 新条目往最上面加，带日期。
 
+## 2026-10-22 · 笔记索引软护栏（P2-3）
+
+**问题**：`addNote` 每轮往 index.json push，文件无限长大；`listNotes` 全量读大文件。
+
+**修法**：`addNote` 写后若条目数超 `MAX_NOTES(2000)`，裁剪最旧，保持有界。
+不影响读取语义（`listNotes` 本就 `slice(-limit)` 取尾部）。
+
+**踩的坑**：初版 patch 误把 `export function addNote` 的 `export` 弄丢，
+导致 `store.addNote is not a function`，4 个 verify 转红。已修复（加回 export）。
+
+**验收**：`verify/store-cap-check.mjs`（2 例）。已反向验证：注入「不裁剪」→ 转红，恢复即绿。
+
+---
+
+## 2026-10-22 · 推理吃空预算自动翻倍重试（P2-1）
+
+**问题**：真跑验证中 `group/auto-hy3` 一次思考就把预算（默认 8000）吃空——
+正文 0、工具 0 → `think` 直接 `ok:false` → 整轮废掉，只能等规则兜底。
+日志表现为「brain 无产出 → 规则兜底」，一天里反复发生。
+
+**修法**：`think` 检测到「推理吃空预算」时，若预算未达硬顶（32000）且未重试过，
+**翻倍预算重试一次**（同一 round），给推理模型「多思考出正文」的机会。仍失败才返回。
+硬顶从 16000 提到 32000。
+
+**设计取舍**：只重试一次（`retriedOnce` 锁死），防止推理模型无限烧预算死循环。
+这只影响「推理吃空」这一个失败路径，不改变正常流。
+
+**验收**：`verify/reason-budget-retry-check.mjs`（3 例：吃空→翻倍重试成功 / 两次吃空→失败且只调 2 次 / 正常只调 1 次）。
+已反向验证：注入「不重试」旧逻辑 → 测试转红，恢复即绿。
+
+---
+2026-10-22 · 自我记忆层（P1）
+
+**问题**：她会写笔记、写两本日记，但 brain 的工具里没有一个「读」。
+每轮醒来的她，人格连续、记忆断片——看过的、想过的，都不会沉淀成"她是怎样的人"。
+
+**做法**（对齐 DSH dsh-bili-humanism 的 human-world.md）：
+
+- 新增 `lib/self.js`：`select / revise / retract / recent / brief / rebuild`。
+- 每天至多选**一句"我的认识"**（非摘要），带来源笔记 id + 日期 + 修订号。
+- **接地校验**：句子必须**字面出现在来源笔记的 title/summary 里**，否则不写。
+- 只影响理解，**不授予权限**——`brief()` 与 `self.md` 头部都标识
+  `revisable_record_not_permission`。
+- 两个工具进工具表：`bili_recall`（读自己的认识/笔记/日记）、`bili_self_note`（选一句沉淀）。
+- brain 的 systemPrompt 注入 `self.brief`（在外部 persona 与口味之后）。
+
+**踩的两个坑**：
+
+1. 账本**不存在**被判成"损坏"（fail-closed 过度）。修复：不存在=空账本，存在但解析失败=损坏。
+2. 在 `bili_reply` 分支注入回合检查时，和体内已有的 `const cfg` 撞名 → 暂时性死区（TDZ）运行时炸。
+   运行时实证（`round-runtime-check.mjs`）才抓出来，静态检查放过了它。改名 `const c` 修掉。
+
+**验收**：`verify/self-check.mjs`（13 例）+ `verify/self-integration-check.mjs`（6 例）。
+**验收**：`verify/self-check.mjs`（13 例）+ `verify/self-integration-check.mjs`（6 例）。
+已反向验证：破坏接地校验 → self-check 转红，恢复即绿。
+
+---
+
+## 2026-10-22 · 分享上限「cfg.quota 缺失回落 3」修复（真跑验证暴露）
+
+**症状**：方案 3 完整真跑时，日志出现「今日已推 3 条（上限 3）」，
+但配置 `shareDaily=5`、`bili_quota` 工具也显示 cap 5。
+
+**根因**：`shareNote` 只从 `cfg.quota.shareDaily` 取上限。
+若某条调用链里 `cfg.quota` 缺失，`{...quota.DEFAULTS, ...cfg.quota}` 只剩
+DEFAULTS 的 3，静默把分享上限变成 3。于是「自动分享用 3、quota 工具显示 5」两套账。
+
+**修法**：上限优先序改为 `opts.maxPerDay > cfg.quota.shareDaily > cfg 顶层 shareDaily > DEFAULTS`。
+`cfg.quota` 缺失时回退读 `cfg.back shareDaily`（`readConfig` 保证给），仍缺才用 DEFAULTS。
+
+**教训**：真跑验证（不是 verify 静态测试）才抓到——verify 全绿时这个 bug 藏得好好的。
+它和「同一个行为多个出口」是同一类病：接口的数字没统一到一处读。
+
+**验收**：`verify/share-cap-fallback-check.mjs`（4 例，钉死回退链）。
+已反向验证：注入旧逻辑（无顶层回退）→ 测试转红，恢复即绿。
+
+---
+
+## 2026-10-22 · 回复与分享分轮（P0）
+
+**问题**：他私信/评论里回了她，她回完话，**同一个回合里又推了一条视频**。
+于是「回一条私信」总是捎带「推一条视频」——回复和分享挤在同一轮。
+
+**改法**：**一个回合只做一类对外动作**，靠工具表隔离，不靠 prompt。
+
+| 回合 | 触发 | 工具表 |
+|---|---|---|
+| social | 有人找她（inbox.tick） | 只有 `bili_inbox` / `bili_reply` |
+| content | 生物钟到点 / 手动 | 其余（看 / 递 / 评论），**剔除 `bili_reply`** |
+
+**为什么用工具表而不是 prompt**：prompt 里写「别一起做」是把责任推给模型的自觉，
+跟「先看收件箱」那次栽的是同一个跟头。工具表里没有那只手，她想捆都捆不了。
+（三重兜底：工具表过滤 + `makeToolRunner` 里对写手做回合校验 + `wakeOnce` 自动分享门排除 social。）
+
+**顺带修的**：
+
+- **分享上限统一到 quota 一处**。此前四套数字并存
+  （`config.shareDaily` / `config.shareMaxPerDay` / `quota.DEFAULTS.shareDaily` / 代码默认），
+  日志里出现过「今日已推 3 条（上限 2）」。现在 `shareMaxPerDay` 仅作旧配置兼容，不再被消费。
+- **同一轮不再重复拉收件箱**（P0-2）。social 回合由 inbox.tick 拉过并把 `pendingCount` 传进来复用。
+- **note id 加随机后缀**，防同毫秒写两条撞 id。
+
+**新增验收**：`verify/round-decouple-check.mjs`（13 例）、`verify/share-limit-check.mjs`（4 例）。
+已做反向验证：注入「自动分享不再排除 social」的 bug 后 round-decouple 转红，恢复即绿。
+
 ---
 
 ## 2026-10-20 · 目录名改为 peikan

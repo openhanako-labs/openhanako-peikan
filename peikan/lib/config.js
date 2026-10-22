@@ -41,7 +41,7 @@ export const DEFAULTS = {
   brainFallback: true,      // brain 失败或无产出时，是否退回规则兜底
   notifyOnWake: true,       // 醒来看完后要不要发系统通知（只推值得的）
   shareToOwner: true,       // 醒来看完递一条视频给你（带 BV 链接）
-  shareMaxPerDay: 10,       // 每天最多递几条
+  shareMaxPerDay: 10,       // 【已废弃 2026-10-22】分享上限以 quota.shareDaily 为唯一真相；保留仅为旧配置兼容
   digestToOwner: true,      // 每天 22:00 推一次「今天谁找过她」
   // 偏好（接 browse 的过滤与加权）
   like: "AI 工具与插件,鬼畜与怀旧向剪辑,猫咪,Live2D/模型,游戏实况",

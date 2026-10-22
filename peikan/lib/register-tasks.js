@@ -84,6 +84,7 @@ export async function registerTasks(sdk, log) {
         // 而 config.json 里明明配了。用一个对象展开展开，避免再漏。
         const r = await wake.wakeOnce(sdk, dataDir, {
           ...cfg,
+          round: "content",   // 到点自己看一轮：只看、只递
           wakeMode: cfg.wakeMode,
           brainFallback: cfg.brainFallback,
           maxVideos: cfg.maxVideos,
@@ -93,7 +94,6 @@ export async function registerTasks(sdk, log) {
           minScore: cfg.minScore,
           ownerMid: cfg.ownerMid,
           shareToOwner: cfg.shareToOwner,
-          shareMaxPerDay: cfg.shareMaxPerDay,
         }, logger);
         // 2. 记 woke 并重算下一趟
         const plan = rhythm.markWoke(dataDir, cfg);
@@ -247,7 +247,10 @@ export async function registerTasks(sdk, log) {
         // 有新消息 → 叫醒她，让她自己决定回不回
         const r2 = await wake.wakeOnce(sdk, dataDir, {
           ...cfg,
-          wakeMode: cfg.wakeMode === "brain" ? "brain" : "rule",
+          round: "social",              // 有人找她：这一轮只回话
+          wakeMode: "brain",            // 回话要模型判断，强制 brain
+          // 2026-10-22：收件箱刚拉过，把结果传给它复用，别让它再拉一遍。
+          pendingCount: fresh.length + dmFresh.length,
           inboxHint: [
             ...fresh.slice(0, 5).map((x) => ({
               id: x.id, who: x.who, mid: x.mid, body: msgfeed.bodyOf(x), kind: x.kind,
@@ -309,6 +312,7 @@ export async function registerTasks(sdk, log) {
         const cfg = await cfgOf();
         try {
           const r0 = await wake.wakeOnce(sdk, dataDir, {
+            round: "content",   // 手动叫醒默认按「自己看一轮」
             wakeMode: req.mode === "brain" ? "brain" : (req.mode === "rule" ? "rule" : cfg.wakeMode),
             brainFallback: cfg.brainFallback,
             skipChance: req.force ? 0 : cfg.skipChance,
@@ -318,7 +322,6 @@ export async function registerTasks(sdk, log) {
             dislike: cfg.dislike,
             minScore: cfg.minScore,
             shareToOwner: cfg.shareToOwner,
-            shareMaxPerDay: cfg.shareMaxPerDay,
             ownerMid: cfg.ownerMid,
           }, logger);
 

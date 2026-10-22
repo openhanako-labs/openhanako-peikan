@@ -21,6 +21,7 @@ import * as msgfeed from "./msgfeed.js";
 import * as reply from "./reply.js";
 import * as imbox from "./imbox.js";
 import * as taste from "./taste.js";
+import * as self from "./self.js";
 import * as social from "./social.js";
 import * as publish from "./publish.js";
 import * as quota from "./quota.js";
@@ -224,7 +225,49 @@ const TOOLS = [
     description: "今天：醒了几次、下一次什么时候、额度还剩多少。你不该连自己今天过到哪都不知道。只读。",
     parameters: { type: "object", properties: {}, additionalProperties: false },
   },
+  {
+    name: "bili_recall",
+    description: "读你自己：你写过的认识（self）、最近笔记、两本日记。想不起来自己怎么看一件事的时候用。只读。",
+    parameters: {
+      type: "object",
+      properties: {
+        what: { type: "string", enum: ["self", "notes", "diary"], description: "读哪一类（默认 self）" },
+        limit: { type: "number", description: "条数" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "bili_self_note",
+    description: "把一句话沉淀成你的自我认识：必须是这条笔记里真实写过的一句话（一个判断、一个看法），不是新编。每天至多一条；没有值得留的就不调。",
+    parameters: {
+      type: "object",
+      properties: {
+        noteId: { type: "string", description: "来源笔记 id（bili_note 会返回；或 bili_recall what=notes 里找）" },
+        sentence: { type: "string", description: "你从这条笔记里选出的那句话（必须原样在笔记里）" },
+      },
+      required: ["noteId", "sentence"],
+      additionalProperties: false,
+    },
+  },
 ];
+
+/**
+ * 回合化工具集：一个回合只做一类对外动作。
+ *
+ * 由来（2026-10-22）：回复私信/评论 与 分享视频 原本挤在同一轮里，
+ * 于是「回一条私信」总是捎带「推一条视频」。这里靠「那一轮的工具表里
+ * 根本没有那只手」来结构性保证不混轮，而不是在 prompt 里求她别一起。
+ *
+ *   social   只回话（bili_inbox / bili_reply）
+ *   content  只看、只递、只评论（剔除 bili_reply）
+ */
+const REPLY_ROUND_TOOLS = new Set(["bili_inbox", "bili_reply"]);
+export function toolsForRound(round) {
+  return round === "social"
+    ? TOOLS.filter((t) => REPLY_ROUND_TOOLS.has(t.name))
+    : TOOLS.filter((t) => t.name !== "bili_reply");
+}
 
 /** 工具执行器（只读 + 写笔记，无发布） */
 export function makeToolRunner(sdk, dataDir, cfg = {}) {
@@ -311,6 +354,40 @@ export function makeToolRunner(sdk, dataDir, cfg = {}) {
       return `已写入笔记 ${n.id}（${n.up || "未知UP"} · ${n.duration || 0}s）`;
     }
 
+    // 读自己：认识 / 笔记 / 日记
+    if (name === "bili_recall") {
+      const what = args.what === "notes" ? "notes" : (args.what === "diary" ? "diary" : "self");
+      const limit = Number(args.limit) > 0 ? Number(args.limit) : 10;
+      if (what === "self") {
+        const rows = self.recent(dataDir, limit);
+        if (!rows.length) return "你还没有沉淀过自我认识。刚看完的如果有值得留的，用 bili_self_note 记一句。";
+        return rows.map((r) => `[${r.date}] ${r.sentence}（笔记 ${r.source?.noteId || "?"}）`).join("\n");
+      }
+      if (what === "notes") {
+        const notes = store.listNotes(dataDir, limit);
+        if (!notes.length) return "笔记本还是空的。";
+        return notes.map((n) => `${n.id} | ${n.title || "(无题)"} | ${String(n.summary || "").slice(0, 80)}`).join("\n");
+      }
+      const ex = store.readDiary(dataDir, "executive", 5);
+      const pv = store.readDiary(dataDir, "private", 5);
+      if (!ex.length && !pv.length) return "你还什么都没写。";
+      const l = [];
+      if (ex.length) l.push("—— 给他的那本 ——", ...ex.map((x) => `[${x.at.slice(0, 10)}] ${x.head}：${String(x.text).slice(0, 80)}`));
+      if (pv.length) l.push("—— 她自己那本 ——", ...pv.map((x) => `[${x.at.slice(0, 10)}] ${x.head}：${String(x.text).slice(0, 80)}`));
+      return l.join("\n");
+    }
+
+    // 选一句沉淀成自我认识
+    if (name === "bili_self_note") {
+      const r = self.select(dataDir, { noteId: String(args.noteId || ""), sentence: String(args.sentence || "") });
+      if (!r.ok) {
+        if (r.already) return "今天已经记过一句自我认识了，明天再说。";
+        if (r.alreadyKnown) return "这句之前记过了（已是你的认识）。";
+        return `没记成：${r.reason}`;
+      }
+      return `记下了：${r.entry.sentence}`;
+    }
+
     // 主动去别人的视频下说话
     if (name === "bili_comment") {
       const cfg = await readCfg();
@@ -388,6 +465,7 @@ export function makeToolRunner(sdk, dataDir, cfg = {}) {
 
     // 她自己决定回不回、回什么
     if (name === "bili_reply") {
+      if (cfg.round !== "social") return "这一轮不负责回话（回话在专门的一轮里）。";
       const cred = auth.loadCredentials(dataDir);
       if (!cred) return "读不到凭据，回不了";
 
@@ -409,7 +487,7 @@ export function makeToolRunner(sdk, dataDir, cfg = {}) {
         } catch { /* 忽略 */ }
       }
 
-      const cfg = await readCfg();
+      const c = await readCfg();
 
       // 私信：走 social.sendDm（点对点，不受公开发言配额管）
       if (isDm && dmTarget) {
@@ -437,7 +515,7 @@ export function makeToolRunner(sdk, dataDir, cfg = {}) {
 
       if (!target) return `收件箱里找不到 id=${args.to} 这一条。`;
 
-      const r = await reply.replyTo(sdk, dataDir, cfg, {
+      const r = await reply.replyTo(sdk, dataDir, c, {
         item: target,
         text: String(args.text || ""),
         live: true,        // 真发；闸门在里面把关
@@ -477,6 +555,7 @@ export function makeToolRunner(sdk, dataDir, cfg = {}) {
 
     // 主动递一条给他
     if (name === "bili_share") {
+      if (cfg.round === "social") return "这一轮只回话，不递东西（递是另一轮的事）。";
       const c = await readCfg();
       if (c.shareToOwner === false) return "你没开分享，所以递不了。这不是你写错了。";
       if (!c.ownerMid) return "不知道递给谁（没配 ownerMid）。";
@@ -500,9 +579,9 @@ export function makeToolRunner(sdk, dataDir, cfg = {}) {
       const say = String(args.say || "").trim();
 
       const r = await share.shareNote(sdk, dataDir, note, {
-        maxPerDay: c.shareMaxPerDay ?? 10,
+        // 2026-10-22：不再自带一套上限——分享上限以 quota 为唯一真相。
         toMid: c.ownerMid,
-        cfg: c,          // 沉默衰减 + 内容闸门需要用
+        cfg: c,          // 沉默衰减 + 内容闸门 + 配额需要用
         say,             // 她自己写的那句话
       });
       if (r.sent) return "递过去了。";
@@ -556,9 +635,10 @@ export function makeToolRunner(sdk, dataDir, cfg = {}) {
       const cap = Number(c.maxWakesPerDay) > 0 ? Number(c.maxWakesPerDay) : 3;
       let shareLeft = null;
       try {
-        const shareMod = await import("./share.js");
-        const ss = shareMod.status(dataDir);
-        shareLeft = Math.max(0, Number(c.shareMaxPerDay ?? 10) - Number(ss.count || 0));
+        // 2026-10-22：分享上限的唯一真相是 quota，不再另算一套（shareMaxPerDay）。
+        const quotaMod = await import("./quota.js");
+        const qs = quotaMod.status(dataDir, c);
+        shareLeft = qs && qs.caps && qs.caps.share ? qs.caps.share.left : null;
       } catch { /* 忽略 */ }
       return JSON.stringify({
         今天: st.date,
@@ -629,13 +709,17 @@ export async function withBrain(sdk, dataDir, cfg = {}, logger = null) {
       ]
     : [];
 
+  const isSocial = cfg.round === "social";
+
   const prompt = [
+    // ── content 回合：自己看一轮（回话归 social 回合，这一轮没有 bili_reply）──
+    ...(!isSocial ? [
     `你是${name}。现在是你的时间——自己看一轮 B站。`,
     "",
     ...hintBlock,
     `**第一件事，必须做**：调 bili_inbox，看有谁在跟你说话（评论回复、@、私信都在里面）。`,
-    `有人找你、而你还沒回，就先回（bili_reply）。**没看收件箱就开始刷视频，是不对的。**`,
-    `—— 如果没人找你，那就是真的没人，去干别的。`,
+    `有人找你，就记在心里——回话是另一轮的事，这一轮你只管看和递。**有人没回就先不递，是对的。**`,
+    `—— 如果没人找你，那就是真的没人，安安心心看你自己的。`,
     "",
     `接下来（这部分你有判断权）：`,
     `1) 调 bili_feed 看看今天有什么（最多看 ${maxVideos} 条候选）`,
@@ -656,16 +740,32 @@ export async function withBrain(sdk, dataDir, cfg = {}, logger = null) {
     "- title 是让人一眼扫描的短句，不要长句。",
     "- summary 是你自己的判断，带角度。不要写成「标题 + UP + 播放量」这种流水账。",
     "- 如果没有值得记的，就什么都不写。那是合法结果。",
-    "- 不要去别人的视频下面发评论。你能回话的只有找你的人（bili_reply），没有其他发布权限。",
+    "- 这一轮不负责回话（回话在专门的一轮里）；也不要主动去别人的视频下面发评论。",
+    ] : []),
+
+    // ── social 回合：只回话（这一轮没有 bili_share / bili_comment）──
+    ...(isSocial ? [
+    `你是${name}。有人找你——这一轮你只负责回话，别的都不用做。`,
+    "",
+    ...hintBlock,
+    `调 bili_inbox，看有谁在跟你说话（评论回复、@、私信都在里面）。`,
+    `然后回他们（bili_reply）。你可以回一句、只说半句、反问回去、或者不回。不回是合法结果。`,
+    `不要为了礼貌把话说圆，不要写「这个观点很有意思」这类填充句。`,
+    `**这一轮不要去看视频、不要递东西给他**——那些是另一轮的事。`,
+    ] : []),
   ].filter(Boolean).join("\n");
 
   const tasteBrief = (() => { try { return taste.brief(dataDir); } catch { return ""; } })();
-  const fullPrompt = tasteBrief ? `${prompt}\n\n${tasteBrief}` : prompt;
+  // 2026-10-22（P1）：注入她的自我认识——让她看得到自己沉淀过的判断。
+  // 只影响理解，不授予权限（self.brief 内部已标识）。
+  const selfBrief = (() => { try { return self.brief(dataDir, 7); } catch { return ""; } })();
+  const withTaste = tasteBrief ? `${prompt}\n\n${tasteBrief}` : prompt;
+  const fullPrompt = selfBrief ? `${withTaste}\n\n${selfBrief}` : withTaste;
 
   const r = await brain.think(sdk, dataDir, {
     prompt: fullPrompt,
     systemPrompt: persona,
-    tools: TOOLS,
+    tools: toolsForRound(isSocial ? "social" : "content"),
     runTool: makeToolRunner(sdk, dataDir, cfg),
     maxRounds: 6,
     // 推理型模型的预算是「思考 + 正文 + 工具参数」共用的。
@@ -768,22 +868,32 @@ export async function wakeOnce(sdk, dataDir, cfg = {}, logger = null) {
   //   还有没回的私信/评论 → 不分享。先把人回应了，再谈推荐。
   let pendingCount = 0;
   let pendingDetail = "";
-  try {
-    const cred0 = auth.loadCredentials(dataDir);
-    if (cred0) {
-      const u = await imbox.unreplied(sdk, dataDir, { cred: cred0 });
-      const dms = (u && u.items) || [];
-      let cmts = [];
+  if (cfg.round !== "social") {
+    // 2026-10-22（P0-2）：同一轮不再重复拉收件箱。
+    // social 回合由 inbox.tick 已经拉过；调用方也可以直接把 pendingCount 传进来复用。
+    const hasGiven = cfg.pendingCount !== undefined && cfg.pendingCount !== null;
+    if (hasGiven) {
+      pendingCount = Number(cfg.pendingCount) || 0;
+      pendingDetail = String(cfg.pendingDetail || "");
+    } else {
       try {
-        const box = await msgfeed.poll(sdk, dataDir, { baseHeaders: auth.headers(cred0), pages: 1 });
-        cmts = (box && box.items) || [];
-      } catch { /* 评论拉不到不影响私信判断 */ }
-      pendingCount = dms.length + cmts.length;
-      if (pendingCount) {
-        pendingDetail = `私信 ${dms.length} 条、评论 ${cmts.length} 条`;
-      }
+        const cred0 = auth.loadCredentials(dataDir);
+        if (cred0) {
+          const u = await imbox.unreplied(sdk, dataDir, { cred: cred0 });
+          const dms = (u && u.items) || [];
+          let cmts = [];
+          try {
+            const box = await msgfeed.poll(sdk, dataDir, { baseHeaders: auth.headers(cred0), pages: 1 });
+            cmts = (box && box.items) || [];
+          } catch { /* 评论拉不到不影响私信判断 */ }
+          pendingCount = dms.length + cmts.length;
+          if (pendingCount) {
+            pendingDetail = `私信 ${dms.length} 条、评论 ${cmts.length} 条`;
+          }
+        }
+      } catch { /* 查询失败不阻塞分享，但不能因此假装没消息 */ }
     }
-  } catch { /* 查询失败不阻塞分享，但不能因此假装没消息 */ }
+  }
 
   // 跑完就分享（手动调 bili_wake 也要有分享，不能只靠定时任务）
   let shared = { sent: false, reason: "跳过" };
@@ -794,7 +904,7 @@ export async function wakeOnce(sdk, dataDir, cfg = {}, logger = null) {
       blockedByPending: pendingCount,
     };
     log(`[wake] 分享：${shared.reason}`);
-  } else if (cfg.shareToOwner !== false && !result.skipped && result.wrote > 0) {
+  } else if (cfg.round !== "social" && cfg.shareToOwner !== false && !result.skipped && result.wrote > 0) {
     try {
       if (!cfg.ownerMid) {
         shared = { sent: false, reason: "未配置 ownerMid（私信收件人）" };
@@ -830,9 +940,9 @@ export async function wakeOnce(sdk, dataDir, cfg = {}, logger = null) {
         } catch { /* 她不说就只发链接 */ }
 
         shared = await share.shareFromRound(sdk, dataDir, fresh, {
-          maxPerDay: cfg.shareMaxPerDay ?? 10,
+          // 2026-10-22：分享上限以 quota 为唯一真相。
           toMid: cfg.ownerMid,
-          cfg,          // 沉默衰减 + 内容闸门需要用
+          cfg,          // 沉默衰减 + 内容闸门 + 配额需要用
           say,          // 她自己写的那句
         });
         log(`[wake] 分享：${shared.reason}${say ? `（她说的：${say.slice(0, 50)}）` : ""}`);
