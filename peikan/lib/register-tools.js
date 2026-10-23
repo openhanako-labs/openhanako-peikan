@@ -827,22 +827,31 @@ export async function registerTools(ctx, log) {
       const cfg = await readConfig(ctx);
       const useMode = a.mode === "brain" ? "brain" : (a.mode === "rule" ? "rule" : cfg.wakeMode);
 
-      // 手动唤醒也要计入每日上限——否则这个闸门只对定时任务有效，对工具无效
+      // 手动叫醒记在 manualWakes 上，**不占她的作息额度**（2026-10-23）。
+      //
+      // 以前两者写进同一个计数器：手动醒一次 +1，很快变成 4/3、5/3、6/3，
+      // 界面上只剩一串看不懂的数字；真正该问的「她今天自己醒了几次」被淹掉。
+      // 上限的意思是她自己的作息有节制，不是你叫她有节制。
+      //
+      // 这条只留个防抖：一次误触不该让她连跑十轮。
       const st0 = rhythm.status(dataDir);
-      const cap = Number(cfg.maxWakesPerDay) > 0 ? Number(cfg.maxWakesPerDay) : 3;
-      if (Number(st0.wakes || 0) >= cap && a.ignoreQuota !== true) {
+      const manualCap = Number(cfg.maxManualWakesPerDay) > 0 ? Number(cfg.maxManualWakesPerDay) : 10;
+      const manualUsed = Number(st0.manualWakes || 0);
+      if (manualUsed >= manualCap && a.ignoreQuota !== true) {
         return text({
           ok: false, blocked: true,
-          reason: `今日已醒 ${st0.wakes}/${cap} 次，到上限了。真要再叫一次就传 ignoreQuota:true`,
-          wakes: st0.wakes, cap,
+          reason: `今天你已经手动叫了她 ${manualUsed} 次（防抖上限 ${manualCap}）。真要再叫一次就传 ignoreQuota:true`,
+          manualWakes: manualUsed, cap: manualCap,
+          // 顺带把真正的作息额度报出来，免得两个数字混成一团
+          wakes: st0.wakes, maxWakesPerDay: cfg.maxWakesPerDay,
         });
       }
-      // 绕过配额要留痕：否则界面上只会看到「5/3」这种看不懂的数字
-      if (Number(st0.wakes || 0) >= cap && a.ignoreQuota === true) {
+      // 绕过要留痕：否则日志里只会看到「又醒了一次」而不知道为什么
+      if (manualUsed >= manualCap && a.ignoreQuota === true) {
         store.audit(dataDir, {
           action: "wake",
           decision: "OVERRIDE",
-          reason: `手动绕过配额（已醒 ${st0.wakes}/${cap}）`,
+          reason: `手动绕过防抖上限（今天手动 ${manualUsed}/${manualCap}）`,
         });
       }
 
@@ -899,9 +908,9 @@ export async function registerTools(ctx, log) {
       }
 
       const r = await wake.wakeOnce(ctx, dataDir, wakeArgs, sdkLogger(ctx));
-      // 记一次醒来（手动也要记，否则侧边栏那个 1/3 永远不动）
+      // 记一笔手动唤醒（不占作息额度，只记账）
       let plan = null;
-      try { plan = rhythm.markWoke(dataDir, cfg); } catch { /* 记账失败不影响结果 */ }
+      try { plan = rhythm.markManualWake(dataDir); } catch { /* 记账失败不影响结果 */ }
 
       return text({
         ok: r.ok,
@@ -917,7 +926,8 @@ export async function registerTools(ctx, log) {
         trace: r.trace ? r.trace.map((t) => ({ r: t.round, tool: t.tool, ok: !t.isError, args: t.args ? JSON.stringify(t.args).slice(0, 160) : null })) : null,
         share: r.share || null,   // 手动唤醒也必须能分享
         wakes: plan ? plan.wakes : undefined,
-        nextWake: plan ? plan.plan : undefined,
+        manualWakes: plan ? plan.manualWakes : undefined,
+        nextWake: rhythm.status(dataDir).plan,
       });
     },
   });

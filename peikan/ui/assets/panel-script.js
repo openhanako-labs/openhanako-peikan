@@ -107,10 +107,12 @@ import { hana } from "./sdk.js";
 
     api("/rhythm").then(function (r) {
       if (!r) return;
-      $("v-wake").textContent = (r.wakes ?? 0) + " / " + (r.maxWakesPerDay ?? 3);
-    // 超配额时把数字标红（.over）——否则「5/3」看着像 bug
-    var wk = Number(r.wakes || 0), capW = Number(r.maxWakesPerDay || 3);
-    $("v-wake").className = "v" + (wk > capW ? " over" : "");
+      var wk = Number(r.wakes || 0), capW = Number(r.maxWakesPerDay || 3);
+      var mw = Number(r.manualWakes || 0);
+      // 手动叫醒现在是另一个计数器：不占她的作息额度，就不再显示成 5/3
+      $("v-wake").textContent = wk + " / " + capW + (mw > 0 ? "（手动 " + mw + "）" : "");
+      // 超配额时把数字标红（.over）——旧状态里可能有历史超出的数据
+      $("v-wake").className = "v" + (wk > capW ? " over" : "");
       var plan = r.plan || {};
       $("v-next").textContent = plan.atText || "—";
     }).catch(function () {});

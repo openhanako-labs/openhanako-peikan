@@ -32,8 +32,9 @@ export const DEFAULTS = {
 
   // 作息
   nightWindows: "07:00-09:00,12:00-14:00,20:00-23:00",  // 窗口固定、时刻随机
-  maxWakesPerDay: 3,        // 每天最多醒几次（硬上限）
-  skipChance: 0.3,          // 每次醒来独立掷
+  maxWakesPerDay: 3,        // 每天最多醒几次（硬上限）——只管她自己醒，不管手动叫醒
+  maxManualWakesPerDay: 10, // 手动叫醒的防抖上限（不算在作息额度里，只防连点）
+  skipChance: 0.3,          // 每次醒来独立掷（只在「自己看一轮」时掷；有人找她的轮次不掷）
   maxVideos: 5,             // 初筛条数
   deepRead: 2,              // 深读条数
   wakeEnabled: false,       // 是否叫醒会话（会花 token，默认关）
@@ -178,6 +179,7 @@ export async function readConfig(ctx) {
     scope: listOf(raw.scope),
 
     maxWakesPerDay: numOf(raw.maxWakesPerDay, 3),
+    maxManualWakesPerDay: numOf(raw.maxManualWakesPerDay, 10),
     skipChance: numOf(raw.skipChance, 0.3),
     maxVideos: numOf(raw.maxVideos, 5),
     deepRead: numOf(raw.deepRead, 2),

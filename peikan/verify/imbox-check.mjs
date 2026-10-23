@@ -193,7 +193,12 @@ t("kill switch 关着也要听（只读不等于失聪）", () => {
   // 用 handler 注册位置做起点（不能只用 KEYS.inbox —— 它第一次出现是在排程处）
   const i = src.indexOf("sdk.tasks.registerHandler(KEYS.inbox");
   assert.ok(i > 0, "找不到 inbox handler 注册");
-  const block = src.slice(i, i + 5000);
+  // 终点取「下一个 registerHandler」——以前这里写死 5000 字符窗口，
+  // 2026-10-23 往 handler 里加了待看队列之后就超窗了，测试变红但不是代码错。
+  // 用 handler 边界划，意图（同一个 handler 内：先拉，再判 kill switch）不变，
+  // 而且比固定长度更严——不会因为有人把判断往后挪到窗口外就漏检。
+  const j = src.indexOf("sdk.tasks.registerHandler", i + 10);
+  const block = src.slice(i, j > i ? j : undefined);
   // kill switch 判断必须在「拉取」之后，不能一进来就 return
   const idxPull = block.indexOf("msgfeed.poll");
   const idxKill = block.indexOf("autoPostEnabled !== true");

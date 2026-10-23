@@ -28,6 +28,7 @@ import * as quota from "./quota.js";
 import * as auth from "./auth.js";
 import * as frames from "./frames.js";
 import * as videoMeta from "./video-meta.js";
+import * as linkqueue from "./linkqueue.js";
 import * as rhythm from "./rhythm.js";
 import { readPersona, readSelection, resolvePersona } from "./identity.js";
 
@@ -263,10 +264,16 @@ const TOOLS = [
  *   content  只看、只递、只评论（剔除 bili_reply）
  */
 const REPLY_ROUND_TOOLS = new Set(["bili_inbox", "bili_reply"]);
-export function toolsForRound(round) {
-  return round === "social"
-    ? TOOLS.filter((t) => REPLY_ROUND_TOOLS.has(t.name))
-    : TOOLS.filter((t) => t.name !== "bili_reply");
+export function toolsForRound(round, opts = {}) {
+  if (round === "social") {
+    const allow = new Set(REPLY_ROUND_TOOLS);
+    // 2026-10-23：他发给她看的视频，可以现在就看完再回。
+    // 只多一只「读」的手（debrief），而且只在队列里真有东西时才给；
+    // 赞 / 评论 / 递 仍然一个都不给 —— 看是只读动作，不是对外发言。
+    if (opts.allowDebrief === true) allow.add("bili_debrief");
+    return TOOLS.filter((t) => allow.has(t.name));
+  }
+  return TOOLS.filter((t) => t.name !== "bili_reply");
 }
 
 /** 工具执行器（只读 + 写笔记，无发布） */
@@ -275,6 +282,16 @@ export function makeToolRunner(sdk, dataDir, cfg = {}) {
   // 工具执行器里的日志：这个作用域没有外层 log，直接从 sdk 取
   const log = (m) => { try { sdk?.logger?.info?.(m); } catch { /* 忽略 */ } };
   return async function runTool(name, args) {
+    // 回合门（2026-10-23）：social 回合只给了一只「读」的手，而且只能读
+    // **他发来的那条**。回了话就不能顺手去刷别人的视频——那会把回话拖成一整轮浏览。
+    if (cfg.round === "social" && name === "bili_debrief") {
+      const bv = linkqueue.bvOf(args.bv || "");
+      const waiting = (() => { try { return linkqueue.pending(dataDir, 20); } catch { return []; } })();
+      if (!bv || !waiting.some((q) => q.bv === bv)) {
+        return "这一轮只回话。要刷视频留到下一轮；只有他发给你、你还没看的那几条现在能看。";
+      }
+    }
+
     if (name === "bili_feed") {
       const lim = Number(args.limit) > 0 ? Math.min(20, Number(args.limit)) : 8;
       const out = args.keyword
@@ -289,6 +306,9 @@ export function makeToolRunner(sdk, dataDir, cfg = {}) {
     if (name === "bili_debrief") {
       const out = await client.debrief(sdk, dataDir, { bvid: args.bv || "", commentLimit: 10 });
       if (!out.ok) return `深读失败：${out.note}`;
+      // 真看过才从待看队列里划掉（2026-10-23）。
+      // 「回完话」不算看过，「debrief 成功」才算。
+      try { linkqueue.markWatched(dataDir, args.bv || ""); } catch { /* 记账失败不影响阅读 */ }
       const v = out.video || {};
       const lines = [`《${v.title}》`, `UP ${v.up} | ${v.duration}秒 | ${v.view}播放 | ${v.danmaku}弹幕`];
       if (v.desc) lines.push(`简介：${String(v.desc).slice(0, 260)}`);
@@ -643,6 +663,7 @@ export function makeToolRunner(sdk, dataDir, cfg = {}) {
       return JSON.stringify({
         今天: st.date,
         醒了几次: `${st.wakes || 0}/${cap}`,
+        他手动叫醒: `${st.manualWakes || 0} 次（不算在你的作息里）`,
         上一次醒: st.lastWokeAt || null,
         下一次: plan.action === "wake" || plan.action === "wait" ? (plan.atText || plan.at) : "今天不再醒",
         今天还能递给他: shareLeft,
@@ -687,8 +708,13 @@ export async function withBrain(sdk, dataDir, cfg = {}, logger = null) {
   const skipChance = Number(cfg.skipChance ?? 0.3);
   const maxVideos = Math.max(1, Number(cfg.maxVideos ?? 5));
 
+  // 回合先定，再掷骰子。2026-10-23 修：之前 skipChance 不分回合，
+  // 于是「有人刚私信她」也有三成概率被她当成「今天不想看」整轮跳过——
+  // 人家找她，她不理。看不看是她的事，回不回是别人的事，两者不能共用一个骰子。
+  const isSocial = cfg.round === "social";
+
   // 先掷「今天看不看」——这一步仍然归规则，她有权安静，不该花 token 去决定
-  if (browse.shouldSkip(skipChance)) {
+  if (!isSocial && browse.shouldSkip(skipChance)) {
     const reason = `这次不想看（掷到了那 ${Math.round(skipChance * 100)}%）`;
     store.appendDiary(dataDir, "private", `今天没看。${reason}。`);
     return { ok: true, mode: "brain", wrote: 0, skipped: true, reason, fallback: false };
@@ -709,7 +735,23 @@ export async function withBrain(sdk, dataDir, cfg = {}, logger = null) {
       ]
     : [];
 
-  const isSocial = cfg.round === "social";
+  // 2026-10-23：他发给她的视频，得有个地方等着被看。
+  // 以前 social 回合只回话、content 回合只看推荐流，「你发我看的」永远没机会被打开。
+  const queued = (() => { try { return linkqueue.pending(dataDir, 5); } catch { return []; } })();
+  const queueBlock = queued.length
+    ? [
+        `**他发给你的、你还没看的**：`,
+        ...queued.map((q) => {
+          const why = q.note ? `（他说：${String(q.note).slice(0, 70)}）` : "";
+          if (!q.bv) return `  · 短链没展开：${q.url}${why} —— 看不出来是哪条，你可以问他`;
+          return `  · ${q.bv}${q.title ? ` 《${q.title}》` : ""}${why}`;
+        }),
+        isSocial
+          ? `想看了再回他（bili_debrief）。不想看也可以说不看——但别装看过。`
+          : `挑真有兴趣的用 bili_debrief 看。`,
+        "",
+      ]
+    : [];
 
   const prompt = [
     // ── content 回合：自己看一轮（回话归 social 回合，这一轮没有 bili_reply）──
@@ -717,6 +759,7 @@ export async function withBrain(sdk, dataDir, cfg = {}, logger = null) {
     `你是${name}。现在是你的时间——自己看一轮 B站。`,
     "",
     ...hintBlock,
+    ...queueBlock,
     `**第一件事，必须做**：调 bili_inbox，看有谁在跟你说话（评论回复、@、私信都在里面）。`,
     `有人找你，就记在心里——回话是另一轮的事，这一轮你只管看和递。**有人没回就先不递，是对的。**`,
     `—— 如果没人找你，那就是真的没人，安安心心看你自己的。`,
@@ -748,10 +791,12 @@ export async function withBrain(sdk, dataDir, cfg = {}, logger = null) {
     `你是${name}。有人找你——这一轮你只负责回话，别的都不用做。`,
     "",
     ...hintBlock,
+    ...queueBlock,
     `调 bili_inbox，看有谁在跟你说话（评论回复、@、私信都在里面）。`,
     `然后回他们（bili_reply）。你可以回一句、只说半句、反问回去、或者不回。不回是合法结果。`,
     `不要为了礼貌把话说圆，不要写「这个观点很有意思」这类填充句。`,
-    `**这一轮不要去看视频、不要递东西给他**——那些是另一轮的事。`,
+    `**这一轮只回话**：除了他发给你、你还没看的那几条（可以 bili_debrief 看一眼再回），` +
+    `不要刷推荐流、不要点赞评论、不要递东西给他 —— 那些是另一轮的事。`,
     ] : []),
   ].filter(Boolean).join("\n");
 
@@ -765,7 +810,7 @@ export async function withBrain(sdk, dataDir, cfg = {}, logger = null) {
   const r = await brain.think(sdk, dataDir, {
     prompt: fullPrompt,
     systemPrompt: persona,
-    tools: toolsForRound(isSocial ? "social" : "content"),
+    tools: toolsForRound(isSocial ? "social" : "content", { allowDebrief: isSocial && queued.length > 0 }),
     runTool: makeToolRunner(sdk, dataDir, cfg),
     maxRounds: 6,
     // 推理型模型的预算是「思考 + 正文 + 工具参数」共用的。

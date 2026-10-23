@@ -21,6 +21,7 @@ import * as wake from "./wake.js";
 import * as msgfeed from "./msgfeed.js";
 import * as imbox from "./imbox.js";
 import * as feedback from "./feedback.js";
+import * as linkqueue from "./linkqueue.js";
 import * as allowlist from "./allowlist.js";
 import * as auth from "./auth.js";
 import { verifySession } from "./auth.js";
@@ -75,6 +76,16 @@ export async function registerTasks(sdk, log) {
           await scheduleNext(plan, cfg);
           logger.info(`[rhythm.wake] 窗口已到，重算计划 → ${plan.action}`);
           return { ok: true, action: "replan", plan };
+        }
+
+        // 0. 作息额度兜底（2026-10-23）：计划层算到上限会 done，但排程可能因为
+        //    重载 / 跨天 / 计划被手改而带着一条过期任务醒来。到点了也不该再跑。
+        const bd = rhythm.budget(dataDir, cfg);
+        if (bd.exhausted) {
+          const plan = rhythm.planAndSave(dataDir, cfg);
+          await scheduleNext(plan, cfg);
+          logger.info(`[rhythm.wake] 今日作息已用完（${bd.wakes}/${bd.cap}），这趟不跑，改排下一趟`);
+          return { ok: true, action: "over-budget", budget: bd, plan };
         }
 
         // 1. 跑一轮（按 wakeMode 分派：rule / brain，brain 失败时自动兜底）
@@ -207,6 +218,55 @@ export async function registerTasks(sdk, log) {
 
         if (!fresh.length && !dmFresh.length) return { ok: true, fresh: 0 };
 
+        // ── 他发来的视频，排进观看队列（2026-10-23）─────────────────
+        // 以前私信里的 BV 只是「一段要回的文字」：social 回合只回话，
+        // content 回合只看推荐流 —— 两条路没有交集，所以他发的东西她从来没打开过。
+        // 这里把链接单独抄一份出来，给之后那一轮看。
+        let queuedLinks = 0;
+        try {
+          const owner = String(cfg.ownerMid || "");
+          for (const m of [...dmFresh, ...fresh]) {
+            if (owner && String(m.mid || "") !== owner) continue;   // 别人的转发不是吩咐
+            const text = String(m.body || m.text || "");
+            const { bvs, shorts } = linkqueue.extract(text);
+            for (const bv of bvs) {
+              const q = linkqueue.enqueue(dataDir, {
+                bv, from: m.who || "主人", mid: m.mid,
+                source: m.kind === "dm" ? "dm" : "comment", note: text,
+              });
+              if (q.added) queuedLinks += 1;
+            }
+            for (const short of shorts) {
+              // b23.tv 短链得先展开才知道是哪条。展开失败就老实存着，
+              // 不自作主张当成「看过了」（后面 prompt 会把它标成未展开）。
+              let bv = "";
+              try {
+                const res = await sdk.network.fetch(short, {
+                  method: "GET",
+                  headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0" },
+                });
+                const finalUrl = String(res?.url || res?.redirectedUrl || "");
+                const bodyText = typeof res?.text === "function" ? String(await res.text()).slice(0, 4000) : "";
+                bv = linkqueue.bvOf(finalUrl) || linkqueue.bvOf(bodyText);
+              } catch { /* 展开失败：保留原链 */ }
+              if (bv) {
+                const q = linkqueue.enqueue(dataDir, {
+                  bv, from: m.who || "主人", mid: m.mid,
+                  source: m.kind === "dm" ? "dm" : "comment", note: text,
+                });
+                if (q.added) queuedLinks += 1;
+                continue;
+              }
+              const q = linkqueue.enqueue(dataDir, {
+                short, from: m.who || "主人", mid: m.mid,
+                source: m.kind === "dm" ? "dm" : "comment", note: text,
+              });
+              if (q.added) queuedLinks += 1;
+            }
+          }
+          if (queuedLinks) logger.info(`[inbox.tick] 他发来 ${queuedLinks} 条视频，已排进待看队列`);
+        } catch { /* 排队失败不影响回话 */ }
+
         // 从主人的话里读反馈（语义判断，非关键词）
         //
         // 为什么放在这里：主人对她说的话，往往就是「这类我不想看」这种反馈。
@@ -326,13 +386,18 @@ export async function registerTasks(sdk, log) {
           }, logger);
 
           let plan0 = null;
-          try { plan0 = rhythm.markWoke(dataDir, cfg); } catch { /* 忽略 */ }
+          try { plan0 = rhythm.markManualWake(dataDir); } catch { /* 忽略 */ }
 
-          // 重算并排下一趟，否则手动醒一次会打乱生物钟
-          try { await scheduleNext(rhythm.planAndSave(dataDir, cfg), cfg); } catch { /* 忽略 */ }
+          // 手动不重算计划（2026-10-23）：她的作息不该因为被叫了一声就改钟。
+          // 但排程可能已不存在（例如当日窗口已过），保一下。
+          try {
+            const st = rhythm.status(dataDir);
+            if (!st.plan || st.plan.action === "done") await scheduleNext(rhythm.planAndSave(dataDir, cfg), cfg);
+          } catch { /* 忽略 */ }
 
           logger.info(
             `[wake.bg] 跑完了：模式 ${r0.mode}、写了 ${r0.wrote} 条` +
+            (plan0 ? `｜今日作息 ${plan0.wakes} 次、手动 ${plan0.manualWakes} 次` : "") +
             (r0.noteWhy ? `｜没写原因：${r0.noteWhy}` : "") +
             (r0.brainError ? `｜brain 失败：${r0.brainError}` : "") +
             (r0.share && r0.share.sent ? "｜分享：已发" : `｜分享：${r0.share ? r0.share.reason : "跳"}`)

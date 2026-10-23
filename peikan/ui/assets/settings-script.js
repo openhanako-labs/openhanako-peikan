@@ -13,6 +13,7 @@ import { hana } from "./sdk.js";
     ["scope", "text"],
     ["nightWindows", "text"],
     ["maxWakesPerDay", "number"],
+    ["maxManualWakesPerDay", "number"],
     ["skipChance", "number"],
     ["maxVideos", "number"],
     ["deepRead", "number"],

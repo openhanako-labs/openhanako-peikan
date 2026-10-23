@@ -17,7 +17,7 @@ const WRITABLE = new Set([
   "autoPostEnabled", "socialEnabled", "publishLive", "allowProactiveComment", "onboardDismissed",
   // 作息与行为
   "wakeMode", "brainFallback", "notifyOnWake", "shareToOwner", "shareMaxPerDay", "digestToOwner",
-  "skipChance", "maxVideos", "deepRead", "maxWakesPerDay", "nightWindows",
+  "skipChance", "maxVideos", "deepRead", "maxWakesPerDay", "maxManualWakesPerDay", "nightWindows",
   // 口味与标尺
   "like", "dislike", "minScore",
   // 白名单与配额

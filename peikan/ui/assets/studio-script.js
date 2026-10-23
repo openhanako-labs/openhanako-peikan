@@ -604,7 +604,8 @@ import { hana } from "./sdk.js";
     api("/rhythm").then(function (r) {
       if (!r) return;
       var plan = r.plan || {};
-      $("r-wakes").textContent = r.wakes ?? 0;
+      // 作息额度只算她自己醒的次数；手动叫醒单列（2026-10-23）
+      $("r-wakes").textContent = (r.wakes ?? 0) + (Number(r.manualWakes || 0) > 0 ? "（手动 " + r.manualWakes + "）" : "");
       $("hero-wake").innerHTML = (r.wakes ?? 0) + "<em>/" + (r.maxWakesPerDay ?? 3) + "</em>";
 
       var planText = plan.action === "wake" ? plan.atText
@@ -829,7 +830,8 @@ import { hana } from "./sdk.js";
     ["scope", "text", "发言白名单", "逗号分隔，例 BV1xx,uid:123。空 = 谁都不发", false],
 
     ["nightWindows", "text", "作息窗口", "窗口固定、时刻随机。格式 HH:MM-HH:MM，逗号分隔", false],
-    ["maxWakesPerDay", "number", "每天最多醒几次", "硬上限。手动叫醒也计入", false],
+    ["maxWakesPerDay", "number", "每天最多醒几次", "她自己醒的上限。手动叫醒不算在里面", false],
+    ["maxManualWakesPerDay", "number", "手动叫醒上限", "只防连点，不占作息额度", false],
     ["skipChance", "number", "今晚不看的概率", "0.3 = 三成。每次醒来独立掷", false],
     ["maxVideos", "number", "初筛条数", "醒来后先拉几条候选", false],
     ["deepRead", "number", "深读条数", "从候选里挑几条真读（1-3）", false],
