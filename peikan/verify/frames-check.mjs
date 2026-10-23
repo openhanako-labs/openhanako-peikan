@@ -189,7 +189,12 @@ t("声明 app/process.spawn", () => {
 });
 t("放行字幕主机", () => {
   const j = JSON.parse(fs.readFileSync(path.join(APP, "manifest.json"), "utf8"));
-  assert.ok((j.network.allowedHosts || []).includes("aisubtitle.hdslb.com"));
+  // 2026-10-23：白名单改成家族通配（`*.hdslb.com`）后，不再逐条列具体主机。
+  // 断言改成「是否被覆盖」——比查字符串更严：以后谁把通配符删了也会红。
+  const hosts = j.network.allowedHosts || [];
+  const covered = (host) => hosts.includes(host) || hosts.some((h) => h.startsWith("*.") && host.endsWith(h.slice(1)));
+  assert.ok(covered("aisubtitle.hdslb.com"), "字幕主机没被任何一条覆盖");
+  assert.ok(covered("i0.hdslb.com"), "封面 CDN 没被任何一条覆盖");
 });
 t("放行视频直链主机（通配）", () => {
   const j = JSON.parse(fs.readFileSync(path.join(APP, "manifest.json"), "utf8"));

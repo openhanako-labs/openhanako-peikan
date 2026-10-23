@@ -27,20 +27,22 @@
   ],
   "network": {
     "allowedHosts": [
-      "api.bilibili.com",
-      "api.vc.bilibili.com",
-      "api.live.bilibili.com",
-      "www.bilibili.com",
       "bilibili.com",
       "*.bilibili.com",
-      "s.search.bilibili.com",
-      "aisubtitle.hdslb.com",
       "b23.tv",
-      "i0.hdslb.com",
-      "i1.hdslb.com",
-      "i2.hdslb.com",
-      "upos-sz-mirrorcos.bilivideo.com",
-      "*.bilivideo.com"
+      "*.b23.tv",
+      "bili2233.cn",
+      "*.bili2233.cn",
+      "bilivideo.com",
+      "*.bilivideo.com",
+      "hdslb.com",
+      "*.hdslb.com",
+      "biliapi.net",
+      "*.biliapi.net",
+      "biliapi.com",
+      "*.biliapi.com",
+      "biliimg.com",
+      "*.biliimg.com"
     ],
     "methods": [
       "GET",
