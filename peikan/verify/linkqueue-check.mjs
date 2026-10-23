@@ -20,6 +20,7 @@ let pass = 0, fail = 0;
 const ok = (n) => { pass++; console.log(`  ✓ ${n}`); };
 const bad = (n, why) => { fail++; console.log(`  ✗ ${n} -> ${why}`); };
 const t = (n, fn) => { try { fn(); ok(n); } catch (e) { bad(n, e.message); } };
+const ta = async (n, fn) => { try { await fn(); ok(n); } catch (e) { bad(n, e.message); } };
 
 const mkDir = () => fs.mkdtempSync(path.join(os.tmpdir(), "lq-"));
 const A = "BV1SBpg6iEwo";
@@ -136,6 +137,65 @@ t("pending / watched 分开计", () => {
     const s = lq.status(d);
     assert.equal(s.pending, 1);
     assert.equal(s.watched, 1);
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});
+
+console.log("\n[6] 从真实消息结构里收链接（复核拓出来的回归）");
+// 私信的条目是 { body }，msgfeed 的评论/@ 条目只有 { source, title }。
+// 2026-10-23 第一版只读了 body || text → 评论里的链接永远进不了队。
+await ta("私信条目（有 body）能进队", async () => {
+  const d = mkDir();
+  try {
+    const r = await lq.collectFromMessages(d, [
+      { id: "1", who: "主人", mid: "42", body: `看这个 ${A}`, kind: "dm" },
+    ], { ownerMid: "42" });
+    assert.equal(r.queued, 1);
+    assert.equal(lq.pending(d)[0].bv, A);
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});
+await ta("评论/@ 条目（只有 source/title）也能进队", async () => {
+  const d = mkDir();
+  try {
+    const r = await lq.collectFromMessages(d, [
+      { who: "主人", mid: "42", source: `回复了我的评论 https://www.bilibili.com/video/${B}`, title: "（不是那条回复的正文）", kind: "reply" },
+    ], { ownerMid: "42" });
+    assert.equal(r.queued, 1, "评论里的链接没进队");
+    assert.equal(lq.pending(d)[0].bv, B);
+    assert.equal(lq.pending(d)[0].source, "comment");
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});
+await ta("不是主人发的就收（别人的转发不是吩咐）", async () => {
+  const d = mkDir();
+  try {
+    const r = await lq.collectFromMessages(d, [
+      { who: "路人", mid: "99", body: `看 ${A}`, kind: "dm" },
+    ], { ownerMid: "42" });
+    assert.equal(r.queued, 0);
+    assert.equal(lq.pending(d).length, 0);
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});
+await ta("短链展开成功 → 存 BV；展开失败 → 保留原链", async () => {
+  const d = mkDir();
+  try {
+    const msgs = [{ who: "主人", mid: "42", body: "https://b23.tv/Okkkkkk", kind: "dm" }];
+    const ok1 = await lq.collectFromMessages(d, msgs, {
+      ownerMid: "42",
+      resolveShort: async () => `https://www.bilibili.com/video/${A}`,
+    });
+    assert.equal(ok1.queued, 1);
+    assert.equal(lq.pending(d)[0].bv, A, "展开后应存 BV");
+
+    const d2 = mkDir();
+    try {
+      await lq.collectFromMessages(d2, [{ who: "主人", mid: "42", body: "https://b23.tv/Qkkkkkk", kind: "dm" }], {
+        ownerMid: "42",
+        resolveShort: async () => { throw new Error("网络炸了"); },
+      });
+      const p = lq.pending(d2);
+      assert.equal(p.length, 1, "展不开也应该留着");
+      assert.equal(p[0].bv, "", "展不开不该凭空填 BV");
+      assert.ok(p[0].url.includes("b23.tv"), "原链丢了");
+    } finally { fs.rmSync(d2, { recursive: true, force: true }); }
   } finally { fs.rmSync(d, { recursive: true, force: true }); }
 });
 

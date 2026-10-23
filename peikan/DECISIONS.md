@@ -90,8 +90,17 @@ content 回合只看推荐流——两条路没有交集，「他发给你看」
 - `b23.tv` 短链会尝试展开（manifest 加了这个域）；展不开就老实标成「没展开，你可以问他」，
   不假装看过。
 
-**验收**：`verify/linkqueue-check.mjs`（13 例）+ `verify/forward-watch-check.mjs`（8 例）。
+**验收**：`verify/linkqueue-check.mjs`（17 例）+ `verify/forward-watch-check.mjs`（8 例）。
 已反向验证：去掉「只能读队列里那条」的门 → forward-watch 转红。
+
+**复查拓出来的（我自己第一版写错的）**：入队只按私信那条路的字段取正文（`body || text`），
+而 `msgfeed.poll()` 的条目根本没有 body/text，正文在 `source` / `title` 上。
+于是**私信里的链接能进队，评论 / @ 里的永远进不去**——而这条决策写的是「私信/评论」。
+现在抹平在 `linkqueue.textOfMessage` 一处，入队循环收成 `collectFromMessages`（可测），
+集成测试直接喂真实字段形状的两种条目。反向验证：把 `source || title` 去掉 → 转红。
+
+**教训**：两个来源的字段名不一样，而我在两处各写了一遍取正文。
+「同一个行为多个出口」这次没犯，倒在了「同一个概念两个形状」。
 
 **没做的**：没有把转发变成「立刻停下手上事去看」。她有自己的节奏——
 排进队里，下一轮看。真急着要她看，手动叫醒她（那时队列就摆在 prompt 第一屏）。

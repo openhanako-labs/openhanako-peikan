@@ -43,7 +43,7 @@ peikan/
   index.js  manifest.json  sdk/
   lib/      39 个模块
   ui/       三个界面
-  verify/   49 个测试文件，624 项
+  verify/   48 个测试文件，628 项
   DECISIONS.md   关键决策的理由
   playbooks/     故障卡
 ```

@@ -55,7 +55,7 @@ export async function registerTasks(sdk, log) {
         label: `奥菲莉娅 · 醒（${new Date(runAt).toLocaleString("zh-CN", { hour: "2-digit", minute: "2-digit" })}）`,
         enabled: true,
       });
-      logger.info(`下一趟已排：${new Date(runAt).toLocaleString("zh-CN")}（${plan.action === "skip" ? "不看那趟" : `窗口 ${plan.window}`}）`);
+      logger.info(`下一趟已排：${new Date(runAt).toLocaleString("zh-CN")}（窗口 ${plan.window || "明天第一趟"}）`);
       return runAt;
     } catch (e) {
       logger.warn(`排程失败：${e.message}`);
@@ -222,48 +222,26 @@ export async function registerTasks(sdk, log) {
         // 以前私信里的 BV 只是「一段要回的文字」：social 回合只回话，
         // content 回合只看推荐流 —— 两条路没有交集，所以他发的东西她从来没打开过。
         // 这里把链接单独抄一份出来，给之后那一轮看。
+        //
+        // ⚠️ 私信条目有 body，msgfeed 的评论/@ 条目只有 source/title——
+        // 取正文的抹平在 linkqueue.textOfMessage 里，不要在这里另写一套。
         let queuedLinks = 0;
         try {
-          const owner = String(cfg.ownerMid || "");
-          for (const m of [...dmFresh, ...fresh]) {
-            if (owner && String(m.mid || "") !== owner) continue;   // 别人的转发不是吩咐
-            const text = String(m.body || m.text || "");
-            const { bvs, shorts } = linkqueue.extract(text);
-            for (const bv of bvs) {
-              const q = linkqueue.enqueue(dataDir, {
-                bv, from: m.who || "主人", mid: m.mid,
-                source: m.kind === "dm" ? "dm" : "comment", note: text,
+          const r = await linkqueue.collectFromMessages(dataDir, [...dmFresh, ...fresh], {
+            ownerMid: cfg.ownerMid,
+            // b23.tv 短链得先展开才知道是哪条。展不开就老实存着，
+            // 不自作主张当成「看过了」（prompt 里会把它标成未展开）。
+            resolveShort: async (short) => {
+              const res = await sdk.network.fetch(short, {
+                method: "GET",
+                headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0" },
               });
-              if (q.added) queuedLinks += 1;
-            }
-            for (const short of shorts) {
-              // b23.tv 短链得先展开才知道是哪条。展开失败就老实存着，
-              // 不自作主张当成「看过了」（后面 prompt 会把它标成未展开）。
-              let bv = "";
-              try {
-                const res = await sdk.network.fetch(short, {
-                  method: "GET",
-                  headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0" },
-                });
-                const finalUrl = String(res?.url || res?.redirectedUrl || "");
-                const bodyText = typeof res?.text === "function" ? String(await res.text()).slice(0, 4000) : "";
-                bv = linkqueue.bvOf(finalUrl) || linkqueue.bvOf(bodyText);
-              } catch { /* 展开失败：保留原链 */ }
-              if (bv) {
-                const q = linkqueue.enqueue(dataDir, {
-                  bv, from: m.who || "主人", mid: m.mid,
-                  source: m.kind === "dm" ? "dm" : "comment", note: text,
-                });
-                if (q.added) queuedLinks += 1;
-                continue;
-              }
-              const q = linkqueue.enqueue(dataDir, {
-                short, from: m.who || "主人", mid: m.mid,
-                source: m.kind === "dm" ? "dm" : "comment", note: text,
-              });
-              if (q.added) queuedLinks += 1;
-            }
-          }
+              const finalUrl = String(res?.url || res?.redirectedUrl || "");
+              const bodyText = typeof res?.text === "function" ? String(await res.text()).slice(0, 4000) : "";
+              return linkqueue.bvOf(finalUrl) || linkqueue.bvOf(bodyText);
+            },
+          });
+          queuedLinks = r.queued;
           if (queuedLinks) logger.info(`[inbox.tick] 他发来 ${queuedLinks} 条视频，已排进待看队列`);
         } catch { /* 排队失败不影响回话 */ }
 
@@ -389,10 +367,13 @@ export async function registerTasks(sdk, log) {
           try { plan0 = rhythm.markManualWake(dataDir); } catch { /* 忽略 */ }
 
           // 手动不重算计划（2026-10-23）：她的作息不该因为被叫了一声就改钟。
-          // 但排程可能已不存在（例如当日窗口已过），保一下。
+          // 但排程可能已经不在了（例如窗口已过、或任务被宿主清掉），保一下。
+          // 看的是**真实排程**而不是 plan 状态：plan 还写着 wake，排程却没了，那种情况
+          // 靠 plan 判断不出来，会静静停摆到下次重载。
           try {
-            const st = rhythm.status(dataDir);
-            if (!st.plan || st.plan.action === "done") await scheduleNext(rhythm.planAndSave(dataDir, cfg), cfg);
+            const list = await safeList(sdk, logger);
+            const hasSchedule = list.some((s) => s.handlerKey === KEYS.wake && s.enabled !== false);
+            if (!hasSchedule) await scheduleNext(rhythm.planAndSave(dataDir, cfg), cfg);
           } catch { /* 忽略 */ }
 
           logger.info(

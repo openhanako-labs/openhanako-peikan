@@ -44,6 +44,18 @@ export function bvOf(text) {
   return m ? m[0] : "";
 }
 
+/**
+ * 从一条消息里取正文。
+ *
+ * ⚠️ 这里的坑（2026-10-23，复核拓出来的）：私信的条目是 `{ body }`，
+ * 而 `msgfeed.poll()` 的条目是 `{ source, title }`——没有 body、没有 text。
+ * 只读 `body || text` 的话，**评论 / @ 里的链接永远抽不到**，
+ * 而 DECISIONS 里写的是「私信/评论」。两处字段名不一样，只能在这里抹平。
+ */
+export function textOfMessage(m) {
+  return String(m?.body || m?.text || m?.source || m?.title || "").trim();
+}
+
 function emptyState() {
   return { updatedAt: nowIso(), items: [] };
 }
@@ -142,4 +154,47 @@ export function status(dataDir) {
     watched: st.items.filter((it) => it.watchedAt).length,
     items: st.items.slice(-MAX_ITEMS),
   };
+}
+
+/**
+ * 把一批消息里主人发的视频链接排进队。
+ *
+ * 单独抽出来（而不是塞在 inbox handler 里）是为了能测：
+ * 私信和评论/@ 的正文在不同字段上，两路都得走通才算完。
+ *
+ * @param {object[]} messages  私信或 msgfeed 的条目（字段不一样，textOfMessage 会抹平）
+ * @param {{ownerMid?:string, resolveShort?:(url:string)=>Promise<string>}} opts
+ *        resolveShort：b23 短链展开器，拿不到就保留原链（prompt 里会明说没展开）
+ * @returns {Promise<{queued:number}>}
+ */
+export async function collectFromMessages(dataDir, messages, { ownerMid = "", resolveShort = null } = {}) {
+  let queued = 0;
+  const owner = String(ownerMid || "");
+
+  for (const m of Array.isArray(messages) ? messages : []) {
+    if (owner && String(m?.mid || "") !== owner) continue;   // 别人的转发不是吩咐
+    const text = textOfMessage(m);
+    if (!text) continue;
+
+    const who = m.who || "主人";
+    const mid = m.mid;
+    const source = m.kind === "dm" ? "dm" : "comment";
+    const { bvs, shorts } = extract(text);
+
+    for (const bv of bvs) {
+      if (enqueue(dataDir, { bv, from: who, mid, source, note: text }).added) queued += 1;
+    }
+    for (const short of shorts) {
+      let resolved = "";
+      if (typeof resolveShort === "function") {
+        try { resolved = bvOf(await resolveShort(short)) || ""; } catch { /* 展不开就保留原链 */ }
+      }
+      const item = resolved
+        ? enqueue(dataDir, { bv: resolved, from: who, mid, source, note: text })
+        : enqueue(dataDir, { short, from: who, mid, source, note: text });
+      if (item.added) queued += 1;
+    }
+  }
+
+  return { queued };
 }
