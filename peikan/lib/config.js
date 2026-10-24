@@ -20,9 +20,9 @@ import path from "node:path";
 
 export const DEFAULTS = {
   // 行为
-  autoPostEnabled: false,   // kill switch：总开关（关 = 只读）
-  socialEnabled: false,     // 点对点开关：关注/私信（不影响公开发言）
-  publishLive: false,       // 公开发言真发（评论/动态/点赞）
+  autoPostEnabled: true,    // kill switch：总开关（关 = 只读）—— 2026-10-24 开放 live
+  socialEnabled: true,      // 点对点开关：关注/私信（不影响公开发言）—— 2026-10-24 开放
+  publishLive: true,        // 公开发言真发（评论/动态/点赞）—— 2026-10-24 开放 live
   allowProactiveComment: false,
   onboardDismissed: false,   // 引导是否已被用户关掉（存在 config 里，不靠 localStorage）  // 允许她主动去别人的视频下评论（默认关：这是最外显的动作）
   personaName: "奥菲莉娅",

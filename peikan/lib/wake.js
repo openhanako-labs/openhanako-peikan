@@ -807,6 +807,35 @@ export async function withBrain(sdk, dataDir, cfg = {}, logger = null) {
   const withTaste = tasteBrief ? `${prompt}\n\n${tasteBrief}` : prompt;
   const fullPrompt = selfBrief ? `${withTaste}\n\n${selfBrief}` : withTaste;
 
+  // ── 确定性前置：主人发来的视频，先看完再回话（2026-10-24 重改）────────
+  // 由来：之前 social 回合把「看主人视频」写在 prompt 里当可选动作，
+  // 模型不调 debrief 就永远不看；而 wrote===0 的兜底走 browse.runOnce（推荐流），
+  // 把待看队列整个跳过了。于是「他发给她看的」经常没人看。
+  // 现在改成确定性前置：social 回合只要队列有未看项，先逐条 debrief（只读、标看过），
+  // 再让 brain 回话 —— 不依赖模型自觉，兜底也不会跳过。
+  let debriefed = 0;
+  if (isSocial && queued.length > 0) {
+    const log2 = (m) => { try { logger && logger.info && logger.info(m); } catch { /* 忽略 */ } };
+    for (const q of queued) {
+      if (!q.bv) { log2(`[wake.debrief] 跳过未展开短链：${q.url || q.short || "?"}`); continue; }
+      try {
+        const out = await client.debrief(sdk, dataDir, { bvid: q.bv, commentLimit: 10 });
+        if (out.ok) {
+          try { linkqueue.markWatched(dataDir, q.bv); } catch { /* 记账失败不影响阅读 */ }
+          debriefed += 1;
+          log2(`[wake.debrief] 已看主人发来的《${out.video && out.video.title ? out.video.title : q.bv}》`);
+        } else {
+          log2(`[wake.debrief] 深读失败 ${q.bv}：${out.note}`);
+        }
+      } catch (e) {
+        log2(`[wake.debrief] 异常 ${q.bv}：${e && e.message ? e.message : e}`);
+      }
+    }
+    if (debriefed > 0) {
+      log2(`[wake.debrief] 确定性前置看完 ${debriefed} 条主人发来的视频，再回话`);
+    }
+  }
+
   const r = await brain.think(sdk, dataDir, {
     prompt: fullPrompt,
     systemPrompt: persona,
@@ -884,6 +913,13 @@ export async function wakeOnce(sdk, dataDir, cfg = {}, logger = null) {
 
     const br = await withBrain(sdk, dataDir, cfg, logger);
     if (br.ok && br.wrote > 0) return { ...br, startedAt };
+
+    // social 回合（被私信叫醒）：兜底不该跑推荐流（那是另一轮的事）。
+    // 确定性前置已经把主人发来的视频看完了，回话由 brain 完成；
+    // 即便没写笔记，也不该退化成「刷推荐」。直接返回，不跑 browse.runOnce。
+    if (cfg.round === "social") {
+      return { ...br, startedAt };
+    }
 
     if (cfg.brainFallback !== false) {
       log(`[wake] brain 无产出 → 规则兜底`);
