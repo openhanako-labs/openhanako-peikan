@@ -134,6 +134,15 @@ export function pending(dataDir, limit = 5) {
   return st.items.filter((it) => !it.watchedAt).slice(0, Math.max(1, Number(limit) || 5));
 }
 
+/** 最近看过的（按 watchedAt 倒序），默认 2 条。用于「主人重提已看视频」时回话引用。 */
+export function recentlyWatched(dataDir, limit = 2) {
+  const st = read(dataDir);
+  return st.items
+    .filter((it) => it.watchedAt)
+    .sort((a, b) => String(b.watchedAt).localeCompare(String(a.watchedAt)))
+    .slice(0, Math.max(1, Number(limit) || 2));
+}
+
 /** 标成看过。只有真的 debrief 成功才调这里。 */
 export function markWatched(dataDir, bv) {
   const key = bvOf(bv) || String(bv || "").trim();

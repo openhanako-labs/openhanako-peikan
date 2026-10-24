@@ -804,37 +804,65 @@ export async function withBrain(sdk, dataDir, cfg = {}, logger = null) {
   // 2026-10-22（P1）：注入她的自我认识——让她看得到自己沉淀过的判断。
   // 只影响理解，不授予权限（self.brief 内部已标识）。
   const selfBrief = (() => { try { return self.brief(dataDir, 7); } catch { return ""; } })();
-  const withTaste = tasteBrief ? `${prompt}\n\n${tasteBrief}` : prompt;
+  const withTaste = tasteBrief ? `${promptWithWatch}\n\n${tasteBrief}` : promptWithWatch;
   const fullPrompt = selfBrief ? `${withTaste}\n\n${selfBrief}` : withTaste;
+
+  // 先准备「看 + 注入」所需的容器（无论 queued 是否为空）
+  const debriefNotes = [];
+  let debriefed = 0;
+  const runDebrief = async (q) => {
+    if (!q.bv) return;
+    const log2 = (m) => { try { logger && logger.info && logger.info(m); } catch { /* 忽略 */ } };
+    try {
+      const out = await client.debrief(sdk, dataDir, { bvid: q.bv, commentLimit: 10 });
+      if (out.ok) {
+        try { linkqueue.markWatched(dataDir, q.bv); } catch { /* 记账失败不影响阅读 */ }
+        debriefed += 1;
+        const v = out.video || {};
+        const lines = ["《" + (v.title || q.bv) + "》"];
+        if (v.desc) lines.push("简介：" + String(v.desc).slice(0, 200));
+        if (out.subtitle && out.subtitle.text) lines.push("字幕摘要：" + out.subtitle.text.slice(0, 600));
+        debriefNotes.push(lines.join("\n  "));
+        log2("[wake.debrief] 已看主人发来的《" + (v.title || q.bv) + "》");
+      } else {
+        log2("[wake.debrief] 深读失败 " + q.bv + "：" + out.note);
+      }
+    } catch (e) {
+      log2("[wake.debrief] 异常 " + q.bv + "：" + (e && e.message ? e.message : e));
+    }
+  };
 
   // ── 确定性前置：主人发来的视频，先看完再回话（2026-10-24 重改）────────
   // 由来：之前 social 回合把「看主人视频」写在 prompt 里当可选动作，
   // 模型不调 debrief 就永远不看；而 wrote===0 的兜底走 browse.runOnce（推荐流），
   // 把待看队列整个跳过了。于是「他发给她看的」经常没人看。
-  // 现在改成确定性前置：social 回合只要队列有未看项，先逐条 debrief（只读、标看过），
-  // 再让 brain 回话 —— 不依赖模型自觉，兜底也不会跳过。
-  let debriefed = 0;
-  if (isSocial && queued.length > 0) {
-    const log2 = (m) => { try { logger && logger.info && logger.info(m); } catch { /* 忽略 */ } };
-    for (const q of queued) {
-      if (!q.bv) { log2(`[wake.debrief] 跳过未展开短链：${q.url || q.short || "?"}`); continue; }
-      try {
-        const out = await client.debrief(sdk, dataDir, { bvid: q.bv, commentLimit: 10 });
-        if (out.ok) {
-          try { linkqueue.markWatched(dataDir, q.bv); } catch { /* 记账失败不影响阅读 */ }
-          debriefed += 1;
-          log2(`[wake.debrief] 已看主人发来的《${out.video && out.video.title ? out.video.title : q.bv}》`);
-        } else {
-          log2(`[wake.debrief] 深读失败 ${q.bv}：${out.note}`);
-        }
-      } catch (e) {
-        log2(`[wake.debrief] 异常 ${q.bv}：${e && e.message ? e.message : e}`);
-      }
+  // 现在改成确定性前置：social 回合先逐条 debrief（只读、标看过），再让 brain 回话 ——
+  // 不依赖模型自觉，兜底也不会跳过。
+  // 关键：debrief 的返回内容（标题 / 简介 / 字幕摘要）必须注入回话 prompt，
+  // 否则她「看了」却「说不出看了啥」，主人会感觉没看。
+  if (isSocial) {
+    for (const q of queued) { await runDebrief(q); }
+    if (debriefed === 0 && queued.length === 0) {
+      const recent = (() => { try { return linkqueue.recentlyWatched(dataDir, 1); } catch { return []; } })();
+      for (const q of recent) { await runDebrief(q); }
     }
     if (debriefed > 0) {
-      log2(`[wake.debrief] 确定性前置看完 ${debriefed} 条主人发来的视频，再回话`);
+      const log2 = (m) => { try { logger && logger.info && logger.info(m); } catch { /* 忽略 */ } };
+      log2("[wake.debrief] 确定性前置看完 " + debriefed + " 条主人发来的视频，再回话");
     }
   }
+
+  // 把「刚看完的视频」直接喂给回话 prompt —— 她得看得见自己看了什么，才回得出东西。
+  const ownerWatchBlock = debriefNotes.length
+    ? [
+        "**他发给你、你刚刚看完的（回话请直接引用，别装没看）**：",
+        ...debriefNotes.map((n) => "  · " + n),
+        "",
+      ].join("\n")
+    : "";
+  const promptWithWatch = ownerWatchBlock ? (prompt + "\n\n" + ownerWatchBlock) : prompt;
+
+
 
   const r = await brain.think(sdk, dataDir, {
     prompt: fullPrompt,
