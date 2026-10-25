@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "peikan",
   "name": "陪看",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "entry": "index.js",
   "icon": "assets/icon-256.png",
   "description": "B站 陪看：自主浏览、写笔记、回话，一切发布过写死的闸门。",

@@ -14,11 +14,11 @@
  *
  * 排除：
  *   verify/      —— 全部是开发和测试脚本，不该进包
- *   sdk/         —— 宿主注入的 SDK 类型，装机时会自带
+ *   verify/      —— 开发/测试脚本，不进包
  *   _stage/      —— 本脚本自己的产物
  *
  * 保留：
- *   index.js / manifest.json / lib/ / assets/ / ui/ / README.md / LICENSE
+ *   index.js / manifest.json / lib/ / assets/ / ui/ / sdk/ / playbooks/ / README.md / LICENSE / DECISIONS.md
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -33,8 +33,8 @@ console.log("=== 清空旧 stage ===");
 fs.rmSync(path.dirname(STAGE), { recursive: true, force: true });
 fs.mkdirSync(STAGE, { recursive: true });
 
-const INCLUDE_DIRS = ["lib", "ui", "assets"];
-const INCLUDE_FILES = ["index.js", "manifest.json", "package.json", "README.md", "LICENSE", "CHANGELOG.md"];
+const INCLUDE_DIRS = ["lib", "ui", "assets", "sdk", "playbooks"];  // sdk 是 index.js 的运行时依赖（./sdk/app-contract/*），必须随包
+const INCLUDE_FILES = ["index.js", "manifest.json", "package.json", "README.md", "LICENSE", "CHANGELOG.md", "DECISIONS.md"];
 const SKIP_DIRS = new Set(["verify", "sdk", "node_modules", ".git", ".tmp", "_stage"]);
 
 function copyDir(from, to) {
