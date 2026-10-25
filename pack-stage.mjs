@@ -4,18 +4,29 @@
  * 手册 §二：打包器「不做白名单」，对 --dir 照单全收。
  * 所以必须先自己组一个干净的 stage。
  *
+ * 用法（在仓库根执行）：
+ *   node pack-stage.mjs
+ *   → 产物落在 ./_stage/peikan（目录名必须等于 App id，手册要求）
+ *
+ * 可选：
+ *   PEIKAN_OWNER_MID=<主人UID> node pack-stage.mjs
+ *   → 额外扫描包内是否泄漏主人 UID（不传就不扫这一项，避免把个人 UID 写进仓库）
+ *
  * 排除：
  *   verify/      —— 全部是开发和测试脚本，不该进包
  *   sdk/         —— 宿主注入的 SDK 类型，装机时会自带
+ *   _stage/      —— 本脚本自己的产物
  *
  * 保留：
- *   index.js / manifest.json / lib/ / assets/ / ui/ / package.json / README.md
+ *   index.js / manifest.json / lib/ / assets/ / ui/ / README.md / LICENSE
  */
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const SRC = "W:/Games/Hanako/Work/ophelia-bili-scaffold/peikan";
-const STAGE = "W:/Games/Hanako/Work/ophelia-bili-scaffold/_stage/peikan";
+// 仓库根 = 本脚本所在目录（源码就在根，不再有嵌套的 peikan/ 子目录）
+const SRC = path.dirname(fileURLToPath(import.meta.url));
+const STAGE = path.join(SRC, "_stage", "peikan");
 
 // 目录名必须等于 App id（手册：否则报 id does not match its directory name）
 console.log("=== 清空旧 stage ===");
@@ -24,7 +35,7 @@ fs.mkdirSync(STAGE, { recursive: true });
 
 const INCLUDE_DIRS = ["lib", "ui", "assets"];
 const INCLUDE_FILES = ["index.js", "manifest.json", "package.json", "README.md", "LICENSE", "CHANGELOG.md"];
-const SKIP_DIRS = new Set(["verify", "sdk", "node_modules", ".git", ".tmp"]);
+const SKIP_DIRS = new Set(["verify", "sdk", "node_modules", ".git", ".tmp", "_stage"]);
 
 function copyDir(from, to) {
   fs.mkdirSync(to, { recursive: true });
@@ -64,10 +75,14 @@ console.log(`\n总计 ${total} 个文件`);
 console.log("\n=== 隐私扫描 ===");
 const DANGER = [
   { name: "凭据", re: /sessdata|bili_jct|buvid3/i },
-  { name: "真实 mid", re: /347410973/ },
   { name: "手机号", re: /\b1[3-9]\d{9}\b/ },
-  { name: "本机绝对路径", re: /W:\\Games|C:\\Users\\Administrator/i },
+  // 本机绝对路径：不写死具体用户名，按盘符+系统目录名兜
+  { name: "本机绝对路径", re: /[A-Z]:[\\/]{1,2}(?:Users|Games)[\\/]/i },
 ];
+
+// 主人 UID 从环境变量传入，避免把个人 UID 固化进仓库
+const ownerMid = String(process.env.PEIKAN_OWNER_MID || "").trim();
+if (ownerMid) DANGER.push({ name: "真实 mid", re: new RegExp(ownerMid) });
 
 const findings = [];
 function scan(dir) {

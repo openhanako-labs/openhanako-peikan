@@ -11,7 +11,13 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 
-const DATA = "W:/Games/Hanako/.hanako/app-data/peikan";
+// 数据目录：命令行参数 > 环境变量。不写死本机路径。
+// 用法：node backfill-notes.mjs "<app-data/peikan 目录>"
+const DATA = process.argv[2] || process.env.PEIKAN_DATA_DIR || "";
+if (!DATA) {
+  console.error("用法：node backfill-notes.mjs <app-data/peikan 目录>");
+  process.exit(1);
+}
 const NOTES = path.join(DATA, "notes", "index.json");
 const COVERS = path.join(DATA, "covers");
 
